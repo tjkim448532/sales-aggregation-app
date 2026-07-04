@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Target, Save, CheckCircle2, AlertCircle } from "lucide-react"
+import { Target, Save, CheckCircle2, AlertCircle, Trash2, ArrowLeft } from "lucide-react"
 import { fetchTargets, saveTargets } from "@/lib/api"
+import Link from "next/link"
 
 export default function TargetsPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear())
@@ -16,6 +17,42 @@ export default function TargetsPage() {
     targetRev: 50000000,
     targetOcc: 80, // percentage integer
   })
+
+  const [allTargets, setAllTargets] = useState<any[]>([])
+
+  const loadAllTargets = () => {
+    const list = []
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith("targets_")) {
+          const parts = key.split("_")
+          if (parts.length === 3) {
+            const y = parseInt(parts[1])
+            const m = parseInt(parts[2])
+            const val = localStorage.getItem(key)
+            if (val) {
+              try {
+                const data = JSON.parse(val)
+                list.push({
+                  year: y,
+                  month: m,
+                  targetRn: data.targetRn ?? 0,
+                  targetRev: data.targetRev ?? 0,
+                  targetOcc: data.targetOcc ?? 0
+                })
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    }
+    list.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year
+      return b.month - a.month
+    })
+    setAllTargets(list)
+  }
 
   useEffect(() => {
     const loadTargets = async () => {
@@ -31,11 +68,14 @@ export default function TargetsPage() {
         }
       } catch (err: any) {
         console.error("Failed to load targets:", err)
-        // Keep current targets as default if load fails (e.g. backend not set up or no data yet)
       }
     }
     loadTargets()
   }, [year, month])
+
+  useEffect(() => {
+    loadAllTargets()
+  }, [])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -49,6 +89,7 @@ export default function TargetsPage() {
         targetOcc: targets.targetOcc,
       })
       setShowSuccess(true)
+      loadAllTargets()
       setTimeout(() => setShowSuccess(false), 3000)
     } catch (err: any) {
       console.error("Failed to save targets:", err)
@@ -58,8 +99,29 @@ export default function TargetsPage() {
     }
   }
 
+  const handleDelete = (y: number, m: number) => {
+    if (confirm(`${y}년 ${m}월 목표 설정을 삭제하시겠습니까?`)) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`targets_${y}_${m}`)
+        loadAllTargets()
+      }
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+      {/* Navigation */}
+      <div className="flex justify-between items-center">
+        <Link 
+          href="/" 
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+        >
+          <ArrowLeft size={16} />
+          <span>대시보드로 돌아가기</span>
+        </Link>
+      </div>
+
+      {/* Target Setting Input Form */}
       <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800 backdrop-blur-md">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-3 bg-indigo-600/20 rounded-lg">
@@ -157,6 +219,78 @@ export default function TargetsPage() {
             <span>{isSaving ? '저장 중...' : '설정 저장'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Target History List Section */}
+      <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800 backdrop-blur-md">
+        <h3 className="text-lg font-bold text-gray-200 mb-4 flex items-center gap-2">
+          <span>설정된 연월별 목표치 리스트</span>
+          <span className="text-xs font-normal text-gray-400 bg-gray-950 px-2 py-0.5 rounded border border-gray-800">
+            총 {allTargets.length}개
+          </span>
+        </h3>
+
+        {allTargets.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-500 border border-dashed border-gray-800 rounded-lg">
+            설정된 목표치가 없습니다. 위 폼에서 목표를 입력한 뒤 '설정 저장'을 클릭하세요.
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-800">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-950/80 border-b border-gray-800">
+                  <th className="px-4 py-3 text-xs font-bold text-gray-300 uppercase tracking-wider text-center">연월</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-300 uppercase tracking-wider text-center">목표 객실수 (R/N)</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-300 uppercase tracking-wider text-center">목표 매출액 (Net)</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-300 uppercase tracking-wider text-center">목표 가동률 (OCC)</th>
+                  <th className="px-4 py-3 text-xs font-bold text-gray-300 uppercase tracking-wider text-center">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/50">
+                {allTargets.map((item) => (
+                  <tr 
+                    key={`${item.year}_${item.month}`} 
+                    className="hover:bg-gray-950/30 transition-colors"
+                  >
+                    <td className="px-4 py-3.5 text-sm text-gray-200 font-semibold text-center">
+                      {item.year}년 {item.month}월
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-gray-300 text-center">
+                      {item.targetRn.toLocaleString()} R/N
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-emerald-400 font-medium text-center">
+                      ₩{item.targetRev.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-amber-400 font-medium text-center">
+                      {item.targetOcc}%
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <div className="flex justify-center items-center gap-3">
+                        <button
+                          onClick={() => {
+                            setYear(item.year)
+                            setMonth(item.month)
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.year, item.month)}
+                          className="text-gray-500 hover:text-rose-400 transition-colors"
+                          title="목표 삭제"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
