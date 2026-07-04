@@ -8,7 +8,7 @@ interface SegmentMatrixRow {
   [key: string]: any;
 }
 
-function calculateSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
+function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"];
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"];
   const pyTypes = ["16PY", "35PY", "51PY"];
@@ -54,16 +54,17 @@ function calculateSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
       const rev = cellREV[cellKey] || 0;
       const occ = cellOCC[cellKey] || 0;
       const adr = rn > 0 ? rev / rn : 0;
+      const formattedOcc = occ / diffDays;
 
       getRow("판매객실수(R/N)")[cellKey] = rn;
       getRow("매출액")[cellKey] = rev;
       getRow("객단가(ADR)")[cellKey] = adr;
-      getRow("가동률(OCC)")[cellKey] = occ;
+      getRow("가동률(OCC)")[cellKey] = formattedOcc;
 
       segTotalRN += rn;
       segTotalREV += rev;
       if (occ > 0) {
-        segTotalWeightedOCCSum += occ * rn;
+        segTotalWeightedOCCSum += formattedOcc * rn;
         segTotalOccCount += rn;
       }
     });
@@ -91,11 +92,12 @@ function calculateSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
       const rn = cellRN[cellKey] || 0;
       const rev = cellREV[cellKey] || 0;
       const occ = cellOCC[cellKey] || 0;
+      const formattedOcc = occ / diffDays;
 
       pyTotalRN += rn;
       pyTotalREV += rev;
       if (occ > 0) {
-        pyTotalWeightedOCCSum += occ * rn;
+        pyTotalWeightedOCCSum += formattedOcc * rn;
         pyTotalOccCount += rn;
       }
     });
@@ -409,8 +411,14 @@ export async function exportDashboardToExcel(
   });
   currRow += 1;
 
+  // Calculate diffDays for OCC conversion
+  const dStart = new Date(startDate);
+  const dEnd = new Date(endDate);
+  const diffTime = Math.abs(dEnd.getTime() - dStart.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
   // Re-calculate the pivoted matrix rows
-  const matrixRows = calculateSegmentMatrix(apiResponse.segmentBreakdown || []);
+  const matrixRows = calculateSegmentMatrix(apiResponse.segmentBreakdown || [], diffDays);
   matrixRows.forEach(row => {
     const r = worksheet.getRow(currRow);
     r.height = 22;
@@ -433,10 +441,10 @@ export async function exportDashboardToExcel(
       const val51 = row[`${isTotal ? "합계" : seg}_51PY`] || 0;
       const valSum = row[`${isTotal ? "합계" : seg}${isTotal ? "_총계" : "_소계"}`] || 0;
 
-      r.getCell(colIdx).value = isOcc ? val16 / 100 : val16;
-      r.getCell(colIdx + 1).value = isOcc ? val35 / 100 : val35;
-      r.getCell(colIdx + 2).value = isOcc ? val51 / 100 : val51;
-      r.getCell(colIdx + 3).value = isOcc ? valSum / 100 : valSum;
+      r.getCell(colIdx).value = val16;
+      r.getCell(colIdx + 1).value = val35;
+      r.getCell(colIdx + 2).value = val51;
+      r.getCell(colIdx + 3).value = valSum;
 
       for (let c = colIdx; c < colIdx + 4; c++) {
         const cell = r.getCell(c);

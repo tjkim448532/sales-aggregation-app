@@ -22,7 +22,7 @@ interface SegmentMatrixRow {
 }
 
 // Helper to transform flat segmentBreakdown to pivoted matrix rows
-function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
+function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"]
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
   const pyTypes = ["16PY", "35PY", "51PY"]
@@ -74,16 +74,17 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
       const rev = cellREV[cellKey] || 0
       const occ = cellOCC[cellKey] || 0
       const adr = rn > 0 ? rev / rn : 0
+      const formattedOcc = (occ / diffDays) * 100
 
       getRow("판매객실수(R/N)")[cellKey] = rn
       getRow("매출액")[cellKey] = rev
       getRow("객단가(ADR)")[cellKey] = adr
-      getRow("가동률(OCC)")[cellKey] = occ
+      getRow("가동률(OCC)")[cellKey] = formattedOcc
 
       segTotalRN += rn
       segTotalREV += rev
       if (occ > 0) {
-        segTotalWeightedOCCSum += occ * rn
+        segTotalWeightedOCCSum += formattedOcc * rn
         segTotalOccCount += rn
       }
     })
@@ -112,11 +113,12 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
       const rn = cellRN[cellKey] || 0
       const rev = cellREV[cellKey] || 0
       const occ = cellOCC[cellKey] || 0
+      const formattedOcc = (occ / diffDays) * 100
 
       pyTotalRN += rn
       pyTotalREV += rev
       if (occ > 0) {
-        pyTotalWeightedOCCSum += occ * rn
+        pyTotalWeightedOCCSum += formattedOcc * rn
         pyTotalOccCount += rn
       }
     })
@@ -391,9 +393,16 @@ export default function DashboardPage() {
     }
   ], [])
 
+  const diffDays = useMemo(() => {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const diffTime = Math.abs(end.getTime() - start.getTime())
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+  }, [startDate, endDate])
+
   const matrixRowData = useMemo(() => {
-    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [])
-  }, [apiResponse])
+    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [], diffDays)
+  }, [apiResponse, diffDays])
 
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.channelBreakdown) return []
