@@ -490,14 +490,14 @@ export default function DashboardPage() {
 
       {/* Target vs Actual (목표 대비 실적 현황) */}
       {targetConfig && (
-        <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-800 backdrop-blur-md space-y-4">
-          <div className="flex justify-between items-center border-b border-gray-800/60 pb-3">
+        <div className="bg-gray-900/70 p-5 rounded-xl border border-gray-700/60 backdrop-blur-md space-y-4 shadow-lg">
+          <div className="flex justify-between items-center border-b border-gray-800/80 pb-3">
             <div>
-              <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-100 flex items-center gap-2">
                 <Target size={16} className="text-indigo-400" />
                 <span>당월 목표 대비 실적 분석 ({endDate.split("-")[0]}년 {parseInt(endDate.split("-")[1])}월 기준)</span>
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">설정된 목표치와 당월 누적 실적(MTD)을 비교합니다.</p>
+              <p className="text-xs text-gray-400 mt-0.5">설정된 목표치와 당월 누적 실적(MTD)을 비교합니다.</p>
             </div>
             <Link 
               href="/targets" 
@@ -512,16 +512,16 @@ export default function DashboardPage() {
             {/* 1. 객실 판매량 (R/N) */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-400">판매 객실 수 (R/N)</span>
-                <span className="text-indigo-400">
+                <span className="text-gray-300">판매 객실 수 (R/N)</span>
+                <span className="text-indigo-400 font-bold">
                   달성률 {targetConfig.targetRn > 0 ? ((actualRn / targetConfig.targetRn) * 100).toFixed(1) : 0}%
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-xl font-bold text-white">{actualRn.toLocaleString()}</span>
-                <span className="text-xs text-gray-500">/ {targetConfig.targetRn.toLocaleString()} R/N</span>
+                <span className="text-xs text-gray-400">/ {targetConfig.targetRn.toLocaleString()} R/N</span>
               </div>
-              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
                 <div 
                   className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
                   style={{ width: `${Math.min(100, targetConfig.targetRn > 0 ? (actualRn / targetConfig.targetRn) * 100 : 0)}%` }}
@@ -532,16 +532,16 @@ export default function DashboardPage() {
             {/* 2. 매출액 */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-400">매출액 (Net)</span>
-                <span className="text-emerald-400">
+                <span className="text-gray-300">매출액 (Net)</span>
+                <span className="text-emerald-400 font-bold">
                   달성률 {targetConfig.targetRev > 0 ? ((actualRev / targetConfig.targetRev) * 100).toFixed(1) : 0}%
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-xl font-bold text-white">₩{Math.round(actualRev / 1000).toLocaleString()}</span>
-                <span className="text-xs text-gray-500">/ ₩{Math.round(targetConfig.targetRev / 1000).toLocaleString()} (천원)</span>
+                <span className="text-xs text-gray-400">/ ₩{Math.round(targetConfig.targetRev / 1000).toLocaleString()} (천원)</span>
               </div>
-              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
                 <div 
                   className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
                   style={{ width: `${Math.min(100, targetConfig.targetRev > 0 ? (actualRev / targetConfig.targetRev) * 100 : 0)}%` }}
@@ -552,16 +552,16 @@ export default function DashboardPage() {
             {/* 3. 객실 가동률 (OCC) */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-400">객실 가동률 (OCC)</span>
-                <span className="text-amber-400">
+                <span className="text-gray-300">객실 가동률 (OCC)</span>
+                <span className="text-amber-400 font-bold">
                   달성률 {targetConfig.targetOcc > 0 ? ((actualOcc / targetConfig.targetOcc) * 100).toFixed(1) : 0}%
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-xl font-bold text-white">{actualOcc.toFixed(1)}%</span>
-                <span className="text-xs text-gray-500">/ {targetConfig.targetOcc}%</span>
+                <span className="text-xs text-gray-400">/ {targetConfig.targetOcc}%</span>
               </div>
-              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
                 <div 
                   className="bg-amber-500 h-full rounded-full transition-all duration-500" 
                   style={{ width: `${Math.min(100, targetConfig.targetOcc > 0 ? (actualOcc / targetConfig.targetOcc) * 100 : 0)}%` }}
