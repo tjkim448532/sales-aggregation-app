@@ -20,7 +20,7 @@ interface SegmentMatrixRow {
 
 // Helper to transform flat segmentBreakdown to pivoted matrix rows
 function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
-  const metrics = ["R/N", "REVENUE", "ADR", "OCC"]
+  const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"]
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
   const pyTypes = ["16PY", "35PY", "51PY"]
 
@@ -72,10 +72,10 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
       const occ = cellOCC[cellKey] || 0
       const adr = rn > 0 ? rev / rn : 0
 
-      getRow("R/N")[cellKey] = rn
-      getRow("REVENUE")[cellKey] = rev
-      getRow("ADR")[cellKey] = adr
-      getRow("OCC")[cellKey] = occ
+      getRow("판매객실수(R/N)")[cellKey] = rn
+      getRow("매출액")[cellKey] = rev
+      getRow("객단가(ADR)")[cellKey] = adr
+      getRow("가동률(OCC)")[cellKey] = occ
 
       segTotalRN += rn
       segTotalREV += rev
@@ -86,10 +86,10 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
     })
 
     const subtotalKey = `${seg}_소계`
-    getRow("R/N")[subtotalKey] = segTotalRN
-    getRow("REVENUE")[subtotalKey] = segTotalREV
-    getRow("ADR")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
-    getRow("OCC")[subtotalKey] = segTotalOccCount > 0 ? segTotalWeightedOCCSum / segTotalOccCount : 0
+    getRow("판매객실수(R/N)")[subtotalKey] = segTotalRN
+    getRow("매출액")[subtotalKey] = segTotalREV
+    getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
+    getRow("가동률(OCC)")[subtotalKey] = segTotalOccCount > 0 ? segTotalWeightedOCCSum / segTotalOccCount : 0
   })
 
   // Calculate overall totals (합계) for each pyType
@@ -119,10 +119,10 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
     })
 
     const totalKey = `합계_${py}`
-    getRow("R/N")[totalKey] = pyTotalRN
-    getRow("REVENUE")[totalKey] = pyTotalREV
-    getRow("ADR")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
-    getRow("OCC")[totalKey] = pyTotalOccCount > 0 ? pyTotalWeightedOCCSum / pyTotalOccCount : 0
+    getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
+    getRow("매출액")[totalKey] = pyTotalREV
+    getRow("객단가(ADR)")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
+    getRow("가동률(OCC)")[totalKey] = pyTotalOccCount > 0 ? pyTotalWeightedOCCSum / pyTotalOccCount : 0
 
     grandTotalRN += pyTotalRN
     grandTotalREV += pyTotalREV
@@ -131,10 +131,10 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
   })
 
   const grandKey = "합계_총계"
-  getRow("R/N")[grandKey] = grandTotalRN
-  getRow("REVENUE")[grandKey] = grandTotalREV
-  getRow("ADR")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("OCC")[grandKey] = grandTotalOccCount > 0 ? grandTotalWeightedOCCSum / grandTotalOccCount : 0
+  getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
+  getRow("매출액")[grandKey] = grandTotalREV
+  getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
+  getRow("가동률(OCC)")[grandKey] = grandTotalOccCount > 0 ? grandTotalWeightedOCCSum / grandTotalOccCount : 0
 
   return rows
 }
@@ -194,16 +194,17 @@ export default function DashboardPage() {
     const num = Number(val)
     if (isNaN(num)) return val
 
-    if (metric === "R/N") {
+    if (metric === "판매객실수(R/N)") {
       return Math.round(num).toLocaleString()
     }
-    if (metric === "REVENUE" || metric === "ADR") {
+    if (metric === "매출액" || metric === "객단가(ADR)") {
       // 1000단위 미만 절사 (천원 단위 표기, ₩ 기호 제거)
       const thousandVal = Math.round(num / 1000)
       return thousandVal.toLocaleString()
     }
-    if (metric === "OCC") {
-      return `${(num * 100).toFixed(1)}%`
+    if (metric === "가동률(OCC)") {
+      // DB에서 이미 퍼센트값(예: 4.2 -> 4.2%)으로 리턴되므로 곱하기 100 없이 직접 소수점 포맷팅만 수행
+      return `${num.toFixed(1)}%`
     }
     return val
   }
