@@ -14,9 +14,14 @@ export interface DailyRevenueData {
   };
 }
 
+import { format, subDays } from 'date-fns';
+
+const todayStr = format(new Date(), 'yyyy-MM-dd');
+const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+
 export const mockDailyRevenue: DailyRevenueData[] = [
   {
-    date: '2026-03-01',
+    date: yesterdayStr,
     segment: '분양회원',
     pyType: '16PY',
     groupName: '회원관리그룹',
@@ -26,7 +31,7 @@ export const mockDailyRevenue: DailyRevenueData[] = [
     metrics: { rn: 15, rev: 1500000, occ: 0.85, adr: 100000 }
   },
   {
-    date: '2026-03-01',
+    date: yesterdayStr,
     segment: 'OTA',
     pyType: '35PY',
     groupName: '온라인영업부',
@@ -36,7 +41,7 @@ export const mockDailyRevenue: DailyRevenueData[] = [
     metrics: { rn: 10, rev: 2500000, occ: 0.90, adr: 250000 }
   },
   {
-    date: '2026-03-02',
+    date: todayStr,
     segment: 'MICE',
     pyType: '51PY',
     groupName: 'B2B영업부',
@@ -46,7 +51,7 @@ export const mockDailyRevenue: DailyRevenueData[] = [
     metrics: { rn: 20, rev: 8000000, occ: 1.0, adr: 400000 }
   },
   {
-    date: '2026-03-02',
+    date: todayStr,
     segment: '자사채널',
     pyType: '16PY',
     groupName: '디지털마케팅',
