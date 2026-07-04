@@ -36,6 +36,9 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   // 백엔드 V3 API 경로로 변경
   const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
     cache: "no-store",
+    headers: {
+      "Authorization": "Bearer mock_super_admin_token",
+    }
   });
 
   if (!response.ok) {
