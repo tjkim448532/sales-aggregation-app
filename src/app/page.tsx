@@ -7,9 +7,10 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, type V3ChannelBreakdownItem } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
+import rateCodesData from "@/data/rate_codes.json"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -145,7 +146,6 @@ export default function DashboardPage() {
   const [apiResponse, setApiResponse] = useState<V3RevenueResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
-  const [gridApi, setGridApi] = useState<any>(null)
   const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
 
   const loadData = async () => {
@@ -168,8 +168,8 @@ export default function DashboardPage() {
   }, [startDate, endDate])
 
   const exportToExcel = () => {
-    if (gridApi) {
-      gridApi.exportDataAsCsv({ fileName: `revenue_export_${startDate}_${endDate}.csv` })
+    if (matrixGridApi) {
+      matrixGridApi.exportDataAsCsv({ fileName: `segment_matrix_${startDate}_${endDate}.csv` })
     }
   }
 
@@ -293,59 +293,7 @@ export default function DashboardPage() {
     return cols
   }, [])
 
-  // Facility Detail Column Definitions
-  const colDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
-    { field: "category", headerName: "분류", filter: true, sortable: true, width: 120 },
-    { field: "name", headerName: "항목명", filter: true, sortable: true, width: 220 },
-    { 
-      field: "today_actual", 
-      headerName: "금일 실적", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 150, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    },
-    { 
-      field: "today_ly", 
-      headerName: "금일 전년", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 150, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    },
-    { 
-      field: "mtd_actual", 
-      headerName: "당월 누적 (MTD)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 170, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    },
-    { 
-      field: "mtd_ly", 
-      headerName: "당월 전년 (MTD LY)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 170, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    },
-    { 
-      field: "ytd_actual", 
-      headerName: "연간 누적 (YTD)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 180, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    },
-    { 
-      field: "ytd_ly", 
-      headerName: "연간 전년 (YTD LY)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 180, 
-      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
-    }
-  ], [])
+  // Channel Detail Column Definitions
 
   const channelColDefs = useMemo<ColDef<V3ChannelBreakdownItem>[]>(() => [
     { field: "channel_name", headerName: "채널명", filter: true, sortable: true, width: 220 },
@@ -489,8 +437,8 @@ export default function DashboardPage() {
       {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(금액 단위: 천원 / R/N 제외)</span></h2>
-          <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">구글 시트 상단 기준</span>
+          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
+          <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">000원 단위 절사</span>
         </div>
         <div className="h-[270px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
@@ -511,8 +459,8 @@ export default function DashboardPage() {
       {/* 2. 예약 채널별 객실 실적 */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약) <span className="text-sm font-normal text-gray-400 ml-2">(단위: 천원)</span></h2>
-          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 중간 기준</span>
+          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
+          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">000원 단위 절사</span>
         </div>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
@@ -528,30 +476,41 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 3. 영업 부서별 매출 상세 (Departmental Revenue Breakdown) */}
+      {/* 3. 요금코드 분류표 (Rate Code Classification Mapping) */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">3. 영업 부서별 매출 상세 (일매출보고서) <span className="text-sm font-normal text-gray-400 ml-2">(단위: 천원)</span></h2>
-          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 하단 기준</span>
+          <h2 className="text-lg font-bold text-gray-200">3. 요금코드 분류표 (정의)</h2>
+          <span className="text-xs text-amber-400 bg-amber-950/50 px-2 py-1 rounded border border-amber-900/50">요금코드 매핑 정의</span>
         </div>
-        <div className="h-[520px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-          <AgGridReact
-            rowData={apiResponse?.dailyReportBreakdown || []}
-            columnDefs={colDefs}
-            defaultColDef={{ resizable: true }}
-            onGridReady={(params) => setGridApi(params.api)}
-            animateRows={true}
-            rowHeight={40}
-            headerHeight={42}
-            getRowStyle={(params) => {
-              const name = params.data?.name || ""
-              if (name.includes("Total") || name.includes("Grand")) {
-                return { fontWeight: 'bold' } as any
-              }
-              return undefined
-            }}
-            className="h-full w-full"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-4">
+          {Object.entries(rateCodesData).map(([segmentName, codes]) => (
+            <div key={segmentName} className="bg-gray-900/40 rounded-xl border border-gray-800 flex flex-col h-[400px]">
+              {/* Header */}
+              <div className="px-3 py-2.5 bg-gray-950/60 border-b border-gray-800 rounded-t-xl flex justify-between items-center shrink-0">
+                <span className="font-semibold text-xs text-indigo-300 truncate" title={segmentName}>{segmentName}</span>
+                <span className="text-[10px] bg-indigo-950/50 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-900/30">
+                  {codes.length}개
+                </span>
+              </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs custom-scrollbar">
+                {codes.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 rounded bg-gray-950/30 hover:bg-gray-950/70 border border-gray-800/50 transition-colors">
+                    <span className="text-gray-300 truncate mr-2" title={item.code}>{item.code}</span>
+                    {item.type && (
+                      <span className={`text-[9px] px-1 py-0.5 rounded shrink-0 font-medium ${
+                        item.type === "고정" 
+                          ? "bg-emerald-950/50 text-emerald-400 border border-emerald-900/30" 
+                          : "bg-amber-950/50 text-amber-400 border border-amber-900/30"
+                      }`}>
+                        {item.type}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
