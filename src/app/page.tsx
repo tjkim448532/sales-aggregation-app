@@ -9,6 +9,7 @@ import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
 import { fetchDailyRevenue, type DailyRevenueData } from "@/lib/mockData"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import DateRangePicker from "@/components/DateRangePicker"
 
 ModuleRegistry.registerModules([ClientSideRowModelModule])
 
@@ -78,22 +79,14 @@ export default function DashboardPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-2 bg-gray-950 px-3 py-2 rounded-lg border border-gray-800">
-            <span className="text-sm text-gray-400">기간</span>
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent text-sm text-gray-200 outline-none"
-            />
-            <span className="text-gray-500">~</span>
-            <input 
-              type="date" 
-              value={endDate} 
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent text-sm text-gray-200 outline-none"
-            />
-          </div>
+          <DateRangePicker 
+            startDate={startDate} 
+            endDate={endDate} 
+            onChange={(start, end) => {
+              setStartDate(start)
+              setEndDate(end)
+            }} 
+          />
           
           <button 
             onClick={loadData}
