@@ -213,8 +213,8 @@ export default function DashboardPage() {
         field: "metric", 
         headerName: "지표", 
         pinned: "left", 
-        width: 110,
-        cellStyle: { fontWeight: 'bold', backgroundColor: '#111827' }
+        width: 120,
+        cellStyle: { fontWeight: 'bold', backgroundColor: '#1f2937', color: '#ffffff', textAlign: 'center' }
       }
     ]
 
@@ -225,26 +225,26 @@ export default function DashboardPage() {
         { 
           field: "합계_16PY", 
           headerName: "16PY", 
-          width: 90,
+          width: 110,
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         },
         { 
           field: "합계_35PY", 
           headerName: "35PY", 
-          width: 90,
+          width: 110,
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         },
         { 
           field: "합계_51PY", 
           headerName: "51PY", 
-          width: 90,
+          width: 110,
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         },
         { 
           field: "합계_총계", 
           headerName: "총계", 
-          width: 110,
-          cellStyle: { fontWeight: 'bold', backgroundColor: '#312e81', color: '#f3f4f6' },
+          width: 130,
+          cellStyle: { fontWeight: 'bold', backgroundColor: '#312e81', color: '#ffffff' },
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         }
       ]
@@ -258,26 +258,26 @@ export default function DashboardPage() {
           { 
             field: `${seg}_16PY`, 
             headerName: "16PY", 
-            width: 85,
+            width: 110,
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           },
           { 
             field: `${seg}_35PY`, 
             headerName: "35PY", 
-            width: 85,
+            width: 110,
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           },
           { 
             field: `${seg}_51PY`, 
             headerName: "51PY", 
-            width: 85,
+            width: 110,
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           },
           { 
             field: `${seg}_소계`, 
             headerName: "소계", 
-            width: 95,
-            cellStyle: { fontWeight: 'bold', backgroundColor: '#1e1b4b' },
+            width: 120,
+            cellStyle: { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#ffffff' },
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           }
         ]
@@ -289,14 +289,14 @@ export default function DashboardPage() {
 
   // Facility Detail Column Definitions
   const colDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
-    { field: "category", headerName: "분류", filter: true, sortable: true, width: 110 },
-    { field: "name", headerName: "항목명", filter: true, sortable: true, width: 180 },
+    { field: "category", headerName: "분류", filter: true, sortable: true, width: 120 },
+    { field: "name", headerName: "항목명", filter: true, sortable: true, width: 220 },
     { 
       field: "today_actual", 
       headerName: "금일 실적", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
-      width: 140, 
+      width: 150, 
       valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
     { 
@@ -304,7 +304,7 @@ export default function DashboardPage() {
       headerName: "금일 전년", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
-      width: 140, 
+      width: 150, 
       valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
     { 
@@ -312,7 +312,7 @@ export default function DashboardPage() {
       headerName: "당월 누적 (MTD)", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
-      width: 165, 
+      width: 170, 
       valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
     { 
@@ -320,7 +320,7 @@ export default function DashboardPage() {
       headerName: "당월 전년 (MTD LY)", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
-      width: 165, 
+      width: 170, 
       valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
     { 
@@ -434,18 +434,22 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭)</h2>
           <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">구글 시트 상단 기준</span>
         </div>
-        <div className="h-[240px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+        <div className="h-[270px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
             rowData={matrixRowData}
             columnDefs={matrixColDefs}
             defaultColDef={{ resizable: true }}
             onGridReady={(params) => setMatrixGridApi(params.api)}
             animateRows={true}
+            rowHeight={45}
+            headerHeight={45}
+            groupHeaderHeight={42}
             getRowStyle={(params) => {
-              if (params.data?.metric === "REVENUE" || params.data?.metric === "ADR") {
-                return { backgroundColor: '#111827/30' }
+              const metric = params.data?.metric
+              if (metric === "REVENUE" || metric === "ADR") {
+                return { backgroundColor: '#1e293b', color: '#ffffff' } as any
               }
-              return undefined
+              return { color: '#ffffff' } as any
             }}
             className="h-full w-full"
           />
@@ -458,22 +462,24 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-gray-200">2. 영업 부서별 매출 상세 (일매출보고서)</h2>
           <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 하단 기준</span>
         </div>
-        <div className="h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+        <div className="h-[520px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
             rowData={apiResponse?.dailyReportBreakdown || []}
             columnDefs={colDefs}
             defaultColDef={{ resizable: true }}
             onGridReady={(params) => setGridApi(params.api)}
             animateRows={true}
+            rowHeight={40}
+            headerHeight={42}
             getRowStyle={(params) => {
               const name = params.data?.name || ""
               if (name.includes("Total") || name.includes("Grand")) {
-                return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#f3f4f6' }
+                return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#ffffff' } as any
               }
               if (params.data?.category === "KPI") {
-                return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' }
+                return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' } as any
               }
-              return undefined
+              return { color: '#e5e7eb' } as any
             }}
             className="h-full w-full"
           />
