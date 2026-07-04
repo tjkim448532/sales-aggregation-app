@@ -1,17 +1,25 @@
-export interface DailyRevenueData {
+export interface V3GridDataItem {
+  depth1: string;
+  depth2: string;
+  depth3: string;
+  salesAmount: number;
+  quantity: number;
+}
+
+export interface V3ChartDataItem {
+  name: string;
+  value: number;
+}
+
+export interface V3RevenueResponse {
+  startDate: string;
+  endDate: string;
   date: string;
-  segment: string;
-  pyType: string;
-  groupName: string;
-  agencyName: string;
-  marketChannel: string;
-  notes: string;
-  metrics: {
-    rn: number;
-    rev: number;
-    occ: number;
-    adr: number;
-  };
+  today: { actual: number; ly_actual: number };
+  mtd: { actual: number; ly_actual: number };
+  ytd: { actual: number; ly_actual: number };
+  gridData: V3GridDataItem[];
+  chartData: V3ChartDataItem[];
 }
 
 export interface Targets {
@@ -26,14 +34,13 @@ const getApiBase = () => {
   return base.replace(/\/+$/, "");
 };
 
-export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<DailyRevenueData[]> => {
+export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
   const apiBase = getApiBase();
   if (!apiBase) {
-    console.warn("NEXT_PUBLIC_API_BASE_URL is not set. Falling back to empty data.");
-    return [];
+    console.warn("NEXT_PUBLIC_API_BASE_URL is not set.");
+    return null;
   }
 
-  // 백엔드 V3 API 경로로 변경
   const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
     cache: "no-store",
     headers: {
@@ -42,7 +49,6 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   });
 
   if (!response.ok) {
-    // 401 Unauthorized 에러 등의 세부 메시지 파싱
     let errorDetail = response.statusText;
     try {
       const errJson = await response.json();
@@ -54,7 +60,7 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   }
 
   const json = await response.json();
-  return json.data as DailyRevenueData[];
+  return json as V3RevenueResponse;
 };
 
 // 백엔드 V3에 targets API가 없으므로 프론트엔드 LocalStorage를 사용하는 폴백(Fallback) 구현
