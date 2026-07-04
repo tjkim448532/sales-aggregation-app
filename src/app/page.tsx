@@ -182,7 +182,10 @@ export default function DashboardPage() {
     if (name === "Occupied Rooms" || name === "Rooms Sold") {
       return Math.round(num).toLocaleString()
     }
-    return `₩${Math.round(num).toLocaleString()}`
+    
+    // 1000단위 미만 절사 (천원 단위 표기, ₩ 기호 제거)
+    const thousandVal = Math.round(num / 1000)
+    return thousandVal.toLocaleString()
   }
 
   // Format values for the Matrix Grid
@@ -195,7 +198,9 @@ export default function DashboardPage() {
       return Math.round(num).toLocaleString()
     }
     if (metric === "REVENUE" || metric === "ADR") {
-      return `₩${Math.round(num).toLocaleString()}`
+      // 1000단위 미만 절사 (천원 단위 표기, ₩ 기호 제거)
+      const thousandVal = Math.round(num / 1000)
+      return thousandVal.toLocaleString()
     }
     if (metric === "OCC") {
       return `${(num * 100).toFixed(1)}%`
@@ -214,7 +219,7 @@ export default function DashboardPage() {
         headerName: "지표", 
         pinned: "left", 
         width: 120,
-        cellStyle: { fontWeight: 'bold', backgroundColor: '#1f2937', color: '#ffffff', textAlign: 'center' }
+        cellStyle: { fontWeight: 'bold', textAlign: 'center', borderRight: '2px solid #d1d5db' }
       }
     ]
 
@@ -244,7 +249,7 @@ export default function DashboardPage() {
           field: "합계_총계", 
           headerName: "총계", 
           width: 130,
-          cellStyle: { fontWeight: 'bold', backgroundColor: '#312e81', color: '#ffffff' },
+          cellStyle: { fontWeight: 'bold', borderRight: '3px solid #374151' },
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         }
       ]
@@ -277,7 +282,7 @@ export default function DashboardPage() {
             field: `${seg}_소계`, 
             headerName: "소계", 
             width: 120,
-            cellStyle: { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#ffffff' },
+            cellStyle: { fontWeight: 'bold', borderRight: '2px solid #9ca3af' },
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           }
         ]
@@ -483,7 +488,7 @@ export default function DashboardPage() {
       {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭)</h2>
+          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(금액 단위: 천원 / R/N 제외)</span></h2>
           <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">구글 시트 상단 기준</span>
         </div>
         <div className="h-[270px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
@@ -496,13 +501,7 @@ export default function DashboardPage() {
             rowHeight={45}
             headerHeight={45}
             groupHeaderHeight={42}
-            getRowStyle={(params) => {
-              const metric = params.data?.metric
-              if (metric === "REVENUE" || metric === "ADR") {
-                return { backgroundColor: '#1e293b', color: '#ffffff' } as any
-              }
-              return undefined
-            }}
+            getRowStyle={() => undefined}
             className="h-full w-full"
           />
         </div>
@@ -511,7 +510,7 @@ export default function DashboardPage() {
       {/* 2. 예약 채널별 객실 실적 */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
+          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약) <span className="text-sm font-normal text-gray-400 ml-2">(단위: 천원)</span></h2>
           <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 중간 기준</span>
         </div>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
@@ -522,7 +521,7 @@ export default function DashboardPage() {
             animateRows={true}
             rowHeight={40}
             headerHeight={42}
-            getRowStyle={() => ({ color: '#e5e7eb' } as any)}
+            getRowStyle={() => undefined}
             className="h-full w-full"
           />
         </div>
@@ -531,7 +530,7 @@ export default function DashboardPage() {
       {/* 3. 영업 부서별 매출 상세 (Departmental Revenue Breakdown) */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">3. 영업 부서별 매출 상세 (일매출보고서)</h2>
+          <h2 className="text-lg font-bold text-gray-200">3. 영업 부서별 매출 상세 (일매출보고서) <span className="text-sm font-normal text-gray-400 ml-2">(단위: 천원)</span></h2>
           <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 하단 기준</span>
         </div>
         <div className="h-[520px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
@@ -546,10 +545,7 @@ export default function DashboardPage() {
             getRowStyle={(params) => {
               const name = params.data?.name || ""
               if (name.includes("Total") || name.includes("Grand")) {
-                return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#ffffff' } as any
-              }
-              if (params.data?.category === "KPI") {
-                return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' } as any
+                return { fontWeight: 'bold' } as any
               }
               return undefined
             }}

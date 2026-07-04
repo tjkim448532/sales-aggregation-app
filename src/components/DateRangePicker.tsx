@@ -32,11 +32,19 @@ export default function DateRangePicker({ startDate, endDate, onChange }: DateRa
   const [isOpen, setIsOpen] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date(startDate))
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null)
+  const [tempStart, setTempStart] = useState<Date | null>(null)
   
   const containerRef = useRef<HTMLDivElement>(null)
 
   const parsedStart = parseISO(startDate)
   const parsedEnd = parseISO(endDate)
+
+  // Reset tempStart when opening popover
+  useEffect(() => {
+    if (isOpen) {
+      setTempStart(null)
+    }
+  }, [isOpen])
 
   // Close when clicking outside
   useEffect(() => {
@@ -50,21 +58,26 @@ export default function DateRangePicker({ startDate, endDate, onChange }: DateRa
   }, [])
 
   const handleDateClick = (date: Date) => {
-    // If no start date or both are already selected, start a new selection
-    if (isSameDay(parsedStart, parsedEnd)) {
-      if (date < parsedStart) {
-        onChange(format(date, "yyyy-MM-dd"), endDate)
-      } else {
-        onChange(startDate, format(date, "yyyy-MM-dd"))
-      }
-    } else {
-      // Reset to single date selection on click
+    if (!tempStart) {
+      // First click: select start date
+      setTempStart(date)
       onChange(format(date, "yyyy-MM-dd"), format(date, "yyyy-MM-dd"))
+    } else {
+      // Second click: select end date
+      if (date >= tempStart) {
+        onChange(format(tempStart, "yyyy-MM-dd"), format(date, "yyyy-MM-dd"))
+        setTempStart(null)
+        setIsOpen(false) // Close picker on completion
+      } else {
+        // If clicked date is before tempStart, treat it as the new start date
+        setTempStart(date)
+        onChange(format(date, "yyyy-MM-dd"), format(date, "yyyy-MM-dd"))
+      }
     }
   }
 
   const handleMouseEnter = (date: Date) => {
-    if (isSameDay(parsedStart, parsedEnd)) {
+    if (tempStart) {
       setHoveredDate(date)
     }
   }
@@ -111,18 +124,22 @@ export default function DateRangePicker({ startDate, endDate, onChange }: DateRa
 
     onChange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
     setCurrentMonth(start)
+    setTempStart(null)
     setIsOpen(false)
   }
 
   const isSelectedRange = (date: Date) => {
+    if (tempStart) {
+      return isSameDay(date, tempStart)
+    }
     return isWithinInterval(date, { start: parsedStart, end: parsedEnd })
   }
 
   const isRangeHovered = (date: Date) => {
-    if (!hoveredDate || !isSameDay(parsedStart, parsedEnd)) return false
+    if (!hoveredDate || !tempStart) return false
     
-    const rangeStart = parsedStart < hoveredDate ? parsedStart : hoveredDate
-    const rangeEnd = parsedStart < hoveredDate ? hoveredDate : parsedStart
+    const rangeStart = tempStart < hoveredDate ? tempStart : hoveredDate
+    const rangeEnd = tempStart < hoveredDate ? hoveredDate : tempStart
     
     return isWithinInterval(date, { start: rangeStart, end: rangeEnd })
   }
