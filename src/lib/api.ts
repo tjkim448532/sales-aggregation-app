@@ -23,6 +23,17 @@ export interface V3ReportBreakdownItem {
   ytd_ly: string | number;
 }
 
+export interface V3ChannelBreakdownItem {
+  channel_name: string;
+  facility_name?: string;
+  today_actual: string | number;
+  today_ly: string | number;
+  mtd_actual: string | number;
+  mtd_ly: string | number;
+  ytd_actual: string | number;
+  ytd_ly: string | number;
+}
+
 export interface V3RevenueResponse {
   startDate: string;
   endDate: string;
@@ -34,6 +45,7 @@ export interface V3RevenueResponse {
   chartData: V3ChartDataItem[];
   dailyReportBreakdown: V3ReportBreakdownItem[];
   segmentBreakdown: any[];
+  channelBreakdown: V3ChannelBreakdownItem[];
 }
 
 export interface Targets {

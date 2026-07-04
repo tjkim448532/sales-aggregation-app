@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, type V3ChannelBreakdownItem } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 
@@ -341,6 +341,58 @@ export default function DashboardPage() {
     }
   ], [])
 
+  const channelColDefs = useMemo<ColDef<V3ChannelBreakdownItem>[]>(() => [
+    { field: "channel_name", headerName: "채널명", filter: true, sortable: true, width: 220 },
+    { 
+      field: "today_actual", 
+      headerName: "금일 실적", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 150, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    },
+    { 
+      field: "today_ly", 
+      headerName: "금일 전년", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 150, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    },
+    { 
+      field: "mtd_actual", 
+      headerName: "당월 누적 (MTD)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 170, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    },
+    { 
+      field: "mtd_ly", 
+      headerName: "당월 전년 (MTD LY)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 170, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    },
+    { 
+      field: "ytd_actual", 
+      headerName: "연간 누적 (YTD)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 180, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    },
+    { 
+      field: "ytd_ly", 
+      headerName: "연간 전년 (YTD LY)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 180, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    }
+  ], [])
+
   const matrixRowData = useMemo(() => {
     return buildSegmentMatrix(apiResponse?.segmentBreakdown || [])
   }, [apiResponse])
@@ -456,10 +508,30 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. 영업 부서별 매출 상세 (Departmental Revenue Breakdown) */}
+      {/* 2. 예약 채널별 객실 실적 */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">2. 영업 부서별 매출 상세 (일매출보고서)</h2>
+          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
+          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 중간 기준</span>
+        </div>
+        <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            rowData={apiResponse?.channelBreakdown || []}
+            columnDefs={channelColDefs}
+            defaultColDef={{ resizable: true }}
+            animateRows={true}
+            rowHeight={40}
+            headerHeight={42}
+            getRowStyle={() => ({ color: '#e5e7eb' } as any)}
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+
+      {/* 3. 영업 부서별 매출 상세 (Departmental Revenue Breakdown) */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-bold text-gray-200">3. 영업 부서별 매출 상세 (일매출보고서)</h2>
           <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 하단 기준</span>
         </div>
         <div className="h-[520px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
