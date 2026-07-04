@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem, type V3RateCodeBreakdownItem } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
@@ -359,6 +359,20 @@ export default function DashboardPage() {
     }))
   }, [apiResponse])
 
+  const rateCodeMap = useMemo(() => {
+    const map: { [key: string]: { roomsSold: number; revenue: number } } = {}
+    if (apiResponse && Array.isArray(apiResponse.rateCodeBreakdown)) {
+      apiResponse.rateCodeBreakdown.forEach((item: V3RateCodeBreakdownItem) => {
+        const code = item.rateCode
+        map[code] = {
+          roomsSold: Number(item.roomsSold || 0),
+          revenue: Number(item.revenue || 0)
+        }
+      })
+    }
+    return map
+  }, [apiResponse])
+
   return (
     <div className="space-y-8 flex flex-col h-full">
       {/* Header Actions */}
@@ -479,12 +493,12 @@ export default function DashboardPage() {
       {/* 3. 요금코드 분류표 (Rate Code Classification Mapping) */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">3. 요금코드 분류표 (정의)</h2>
-          <span className="text-xs text-amber-400 bg-amber-950/50 px-2 py-1 rounded border border-amber-900/50">요금코드 매핑 정의</span>
+          <h2 className="text-lg font-bold text-gray-200">3. 요금코드별 실적 (분류표 정의)</h2>
+          <span className="text-xs text-amber-400 bg-amber-950/50 px-2 py-1 rounded border border-amber-900/50">000원 단위 절사</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-4">
           {Object.entries(rateCodesData).map(([segmentName, codes]) => (
-            <div key={segmentName} className="bg-gray-900/40 rounded-xl border border-gray-800 flex flex-col h-[400px]">
+            <div key={segmentName} className="bg-gray-900/40 rounded-xl border border-gray-800 flex flex-col h-[450px]">
               {/* Header */}
               <div className="px-3 py-2.5 bg-gray-950/60 border-b border-gray-800 rounded-t-xl flex justify-between items-center shrink-0">
                 <span className="font-semibold text-xs text-indigo-300 truncate" title={segmentName}>{segmentName}</span>
@@ -494,20 +508,29 @@ export default function DashboardPage() {
               </div>
               {/* Body */}
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs custom-scrollbar">
-                {codes.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 rounded bg-gray-950/30 hover:bg-gray-950/70 border border-gray-800/50 transition-colors">
-                    <span className="text-gray-300 truncate mr-2" title={item.code}>{item.code}</span>
-                    {item.type && (
-                      <span className={`text-[9px] px-1 py-0.5 rounded shrink-0 font-medium ${
-                        item.type === "고정" 
-                          ? "bg-emerald-950/50 text-emerald-400 border border-emerald-900/30" 
-                          : "bg-amber-950/50 text-amber-400 border border-amber-900/30"
-                      }`}>
-                        {item.type}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {codes.map((item, idx) => {
+                  const stats = rateCodeMap[item.code] || { roomsSold: 0, revenue: 0 }
+                  return (
+                    <div key={idx} className="p-2 rounded bg-gray-950/30 hover:bg-gray-950/70 border border-gray-800/50 transition-all flex flex-col gap-1.5">
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="text-gray-200 font-medium truncate" title={item.code}>{item.code}</span>
+                        {item.type && (
+                          <span className={`text-[9px] px-1 py-0.2 rounded shrink-0 font-medium ${
+                            item.type === "고정" 
+                              ? "bg-emerald-950/40 text-emerald-400 border border-emerald-900/20" 
+                              : "bg-amber-950/40 text-amber-400 border border-amber-900/20"
+                          }`}>
+                            {item.type}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-gray-500 border-t border-gray-800/20 pt-1 mt-0.5">
+                        <span>객실: <strong className="text-indigo-400">{stats.roomsSold}</strong></span>
+                        <span>매출: <strong className="text-emerald-500">{Math.round(stats.revenue / 1000).toLocaleString()}</strong></span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ))}

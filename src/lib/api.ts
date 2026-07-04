@@ -34,6 +34,13 @@ export interface V3ChannelBreakdownItem {
   ytd_ly: string | number;
 }
 
+export interface V3RateCodeBreakdownItem {
+  rateCode: string;
+  segment: string;
+  roomsSold: number;
+  revenue: number;
+}
+
 export interface V3RevenueResponse {
   startDate: string;
   endDate: string;
@@ -46,6 +53,7 @@ export interface V3RevenueResponse {
   dailyReportBreakdown: V3ReportBreakdownItem[];
   segmentBreakdown: any[];
   channelBreakdown: V3ChannelBreakdownItem[];
+  rateCodeBreakdown: V3RateCodeBreakdownItem[];
 }
 
 export interface Targets {
