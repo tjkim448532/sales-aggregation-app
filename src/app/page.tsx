@@ -2,15 +2,16 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format, subDays } from "date-fns"
-import { Download, Search, RefreshCw, AlertCircle } from "lucide-react"
+import { Download, Search, RefreshCw, AlertCircle, Target } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem, type V3RateCodeBreakdownItem } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem, type V3RateCodeBreakdownItem, fetchTargets } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
+import Link from "next/link"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -147,6 +148,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
+  
+  const [targetConfig, setTargetConfig] = useState<any>({ targetRn: 0, targetRev: 0, targetOcc: 0 })
 
   const loadData = async () => {
     setIsLoading(true)
@@ -166,6 +169,43 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData()
   }, [startDate, endDate])
+
+  useEffect(() => {
+    const loadTargetConfig = async () => {
+      try {
+        const parts = endDate.split("-")
+        const year = parseInt(parts[0])
+        const month = parseInt(parts[1])
+        const data = await fetchTargets(year, month)
+        if (data) {
+          setTargetConfig(data)
+        }
+      } catch (e) {
+        console.error("Failed to fetch targets:", e)
+      }
+    }
+    loadTargetConfig()
+  }, [endDate])
+
+  const actualRn = useMemo(() => {
+    if (!apiResponse || !Array.isArray(apiResponse.dailyReportBreakdown)) return 0
+    const occupiedItem = apiResponse.dailyReportBreakdown.find(x => x.name === "Occupied Rooms")
+    return occupiedItem ? Number(occupiedItem.mtd_actual || 0) : 0
+  }, [apiResponse])
+
+  const actualRev = useMemo(() => {
+    return apiResponse?.mtd?.actual || 0
+  }, [apiResponse])
+
+  const actualOcc = useMemo(() => {
+    if (actualRn === 0) return 0
+    const parts = endDate.split("-")
+    const year = parseInt(parts[0])
+    const month = parseInt(parts[1])
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const totalCapacity = 214
+    return daysInMonth > 0 ? (actualRn / (totalCapacity * daysInMonth)) * 100 : 0
+  }, [actualRn, endDate])
 
   const exportToExcel = () => {
     if (matrixGridApi) {
@@ -448,12 +488,93 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Target vs Actual (목표 대비 실적 현황) */}
+      {targetConfig && (
+        <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-800 backdrop-blur-md space-y-4">
+          <div className="flex justify-between items-center border-b border-gray-800/60 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
+                <Target size={16} className="text-indigo-400" />
+                <span>당월 목표 대비 실적 분석 ({endDate.split("-")[0]}년 {parseInt(endDate.split("-")[1])}월 기준)</span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">설정된 목표치와 당월 누적 실적(MTD)을 비교합니다.</p>
+            </div>
+            <Link 
+              href="/targets" 
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition-colors"
+            >
+              <span>목표 설정하러 가기</span>
+              <span>&rarr;</span>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 1. 객실 판매량 (R/N) */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-gray-400">판매 객실 수 (R/N)</span>
+                <span className="text-indigo-400">
+                  달성률 {targetConfig.targetRn > 0 ? ((actualRn / targetConfig.targetRn) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">{actualRn.toLocaleString()}</span>
+                <span className="text-xs text-gray-500">/ {targetConfig.targetRn.toLocaleString()} R/N</span>
+              </div>
+              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+                <div 
+                  className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, targetConfig.targetRn > 0 ? (actualRn / targetConfig.targetRn) * 100 : 0)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 2. 매출액 */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-gray-400">매출액 (Net)</span>
+                <span className="text-emerald-400">
+                  달성률 {targetConfig.targetRev > 0 ? ((actualRev / targetConfig.targetRev) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">₩{Math.round(actualRev / 1000).toLocaleString()}</span>
+                <span className="text-xs text-gray-500">/ ₩{Math.round(targetConfig.targetRev / 1000).toLocaleString()} (천원)</span>
+              </div>
+              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+                <div 
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, targetConfig.targetRev > 0 ? (actualRev / targetConfig.targetRev) * 100 : 0)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 3. 객실 가동률 (OCC) */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-gray-400">객실 가동률 (OCC)</span>
+                <span className="text-amber-400">
+                  달성률 {targetConfig.targetOcc > 0 ? ((actualOcc / targetConfig.targetOcc) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">{actualOcc.toFixed(1)}%</span>
+                <span className="text-xs text-gray-500">/ {targetConfig.targetOcc}%</span>
+              </div>
+              <div className="w-full bg-gray-950 rounded-full h-2 overflow-hidden border border-gray-800/50">
+                <div 
+                  className="bg-amber-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, targetConfig.targetOcc > 0 ? (actualOcc / targetConfig.targetOcc) * 100 : 0)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
-          <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">000원 단위 절사</span>
-        </div>
+        <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
         <div className="h-[270px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
             rowData={matrixRowData}
@@ -472,10 +593,7 @@ export default function DashboardPage() {
 
       {/* 2. 예약 채널별 객실 실적 */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
-          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">000원 단위 절사</span>
-        </div>
+        <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
             rowData={apiResponse?.channelBreakdown || []}
@@ -492,10 +610,7 @@ export default function DashboardPage() {
 
       {/* 3. 요금코드 분류표 (Rate Code Classification Mapping) */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-200">3. 요금코드별 실적 (분류표 정의)</h2>
-          <span className="text-xs text-amber-400 bg-amber-950/50 px-2 py-1 rounded border border-amber-900/50">000원 단위 절사</span>
-        </div>
+        <h2 className="text-lg font-bold text-gray-200">3. 요금코드별 실적 (분류표 정의)</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-4">
           {Object.entries(rateCodesData).map(([segmentName, codes]) => (
             <div key={segmentName} className="bg-gray-900/40 rounded-xl border border-gray-800 flex flex-col h-[450px]">
@@ -540,10 +655,7 @@ export default function DashboardPage() {
       {/* Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-3 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-semibold text-gray-200">예약 채널별 매출 현황 (Revenue by Channel)</h3>
-            <span className="text-[10px] text-teal-400 bg-teal-950/50 px-2 py-0.5 rounded border border-teal-900/50">000원 단위 절사</span>
-          </div>
+          <h3 className="text-sm font-semibold text-gray-200 mb-4">예약 채널별 매출 현황 (Revenue by Channel)</h3>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 0, left: 10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
