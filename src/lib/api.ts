@@ -33,33 +33,45 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
     return [];
   }
 
-  const response = await fetch(`${apiBase}/api/revenue/daily?startDate=${startDate}&endDate=${endDate}`, {
+  // 백엔드 V3 API 경로로 변경
+  const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch daily revenue: ${response.statusText}`);
+    // 401 Unauthorized 에러 등의 세부 메시지 파싱
+    let errorDetail = response.statusText;
+    try {
+      const errJson = await response.json();
+      if (errJson && errJson.error) {
+        errorDetail = errJson.error;
+      }
+    } catch (e) {}
+    throw new Error(`백엔드 오류 (${response.status}): ${errorDetail}`);
   }
 
   const json = await response.json();
   return json.data as DailyRevenueData[];
 };
 
+// 백엔드 V3에 targets API가 없으므로 프론트엔드 LocalStorage를 사용하는 폴백(Fallback) 구현
 export const fetchTargets = async (year: number, month: number): Promise<Targets> => {
-  const apiBase = getApiBase();
-  if (!apiBase) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not set.");
+  if (typeof window !== "undefined") {
+    const key = `targets_${year}_${month}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved) as Targets;
+      } catch (e) {}
+    }
   }
-
-  const response = await fetch(`${apiBase}/api/targets?year=${year}&month=${month}`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch targets: ${response.statusText}`);
-  }
-
-  return await response.json() as Targets;
+  
+  // 기본값 반환
+  return {
+    targetRn: 500,
+    targetRev: 50000000,
+    targetOcc: 80
+  };
 };
 
 export const saveTargets = async (payload: {
@@ -69,22 +81,15 @@ export const saveTargets = async (payload: {
   targetRev: number;
   targetOcc: number;
 }): Promise<any> => {
-  const apiBase = getApiBase();
-  if (!apiBase) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not set.");
+  if (typeof window !== "undefined") {
+    const key = `targets_${payload.year}_${payload.month}`;
+    localStorage.setItem(key, JSON.stringify({
+      targetRn: payload.targetRn,
+      targetRev: payload.targetRev,
+      targetOcc: payload.targetOcc
+    }));
   }
-
-  const response = await fetch(`${apiBase}/api/targets`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to save targets: ${response.statusText}`);
-  }
-
-  return await response.json();
+  
+  return { success: true, message: "목표가 로컬 브라우저에 성공적으로 저장되었습니다." };
 };
+
