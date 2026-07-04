@@ -12,6 +12,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
 import Link from "next/link"
+import { exportDashboardToExcel } from "@/lib/excelExport"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -207,9 +208,12 @@ export default function DashboardPage() {
     return daysInMonth > 0 ? (actualRn / (totalCapacity * daysInMonth)) * 100 : 0
   }, [actualRn, endDate])
 
-  const exportToExcel = () => {
-    if (matrixGridApi) {
-      matrixGridApi.exportDataAsCsv({ fileName: `segment_matrix_${startDate}_${endDate}.csv` })
+  const exportToExcel = async () => {
+    try {
+      await exportDashboardToExcel(apiResponse, startDate, endDate, targetConfig)
+    } catch (e) {
+      console.error("Excel export error:", e)
+      alert("엑셀 다운로드 중 오류가 발생했습니다.")
     }
   }
 
