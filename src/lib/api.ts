@@ -33,6 +33,7 @@ export interface V3RevenueResponse {
   gridData: V3GridDataItem[];
   chartData: V3ChartDataItem[];
   dailyReportBreakdown: V3ReportBreakdownItem[];
+  segmentBreakdown: any[];
 }
 
 export interface Targets {

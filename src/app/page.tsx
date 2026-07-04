@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { format, subDays } from "date-fns"
 import { Download, Search, RefreshCw, AlertCircle } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
-import { ColDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
+import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
 import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem } from "@/lib/api"
@@ -204,11 +204,11 @@ export default function DashboardPage() {
   }
 
   // Segment PY Matrix Column Definitions
-  const matrixColDefs = useMemo<ColDef[]>(() => {
+  const matrixColDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
     const pyTypes = ["16PY", "35PY", "51PY"]
 
-    const cols: ColDef[] = [
+    const cols: (ColDef | ColGroupDef)[] = [
       { 
         field: "metric", 
         headerName: "지표", 
