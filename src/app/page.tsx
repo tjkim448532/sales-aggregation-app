@@ -265,8 +265,10 @@ export default function DashboardPage() {
         field: "metric", 
         headerName: "지표", 
         pinned: "left", 
-        width: 120,
-        cellStyle: { fontWeight: 'bold', textAlign: 'center', borderRight: '2px solid #d1d5db' }
+        width: 140,
+        wrapText: true,
+        autoHeight: true,
+        cellStyle: { fontWeight: 'bold', textAlign: 'center', borderRight: '2px solid #d1d5db', whiteSpace: 'normal', lineHeight: '1.4' }
       }
     ]
 
@@ -296,7 +298,7 @@ export default function DashboardPage() {
           field: "합계_총계", 
           headerName: "총계", 
           width: 130,
-          cellStyle: { fontWeight: 'bold', borderRight: '3px solid #374151' },
+          cellStyle: { fontWeight: 'bold', borderRight: '3px solid #374151', textAlign: 'center' },
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         }
       ]
@@ -329,7 +331,7 @@ export default function DashboardPage() {
             field: `${seg}_소계`, 
             headerName: "소계", 
             width: 120,
-            cellStyle: { fontWeight: 'bold', borderRight: '2px solid #9ca3af' },
+            cellStyle: { fontWeight: 'bold', borderRight: '2px solid #9ca3af', textAlign: 'center' },
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           }
         ]
@@ -342,7 +344,7 @@ export default function DashboardPage() {
   // Channel Detail Column Definitions
 
   const channelColDefs = useMemo<ColDef<V3ChannelBreakdownItem>[]>(() => [
-    { field: "channel_name", headerName: "채널명", filter: true, sortable: true, width: 220 },
+    { field: "channel_name", headerName: "채널명", filter: true, sortable: true, width: 220, cellStyle: { textAlign: 'left' } },
     { 
       field: "today_actual", 
       headerName: "금일 실적", 
@@ -588,15 +590,19 @@ export default function DashboardPage() {
       {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
       <div className="space-y-3">
         <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
-        <div className="h-[270px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+        <div className="h-[295px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
             rowData={matrixRowData}
             columnDefs={matrixColDefs}
-            defaultColDef={{ resizable: true }}
+            defaultColDef={{ 
+              resizable: true, 
+              wrapHeaderText: true, 
+              autoHeaderHeight: true, 
+              cellStyle: { textAlign: 'center' } 
+            }}
             onGridReady={(params) => setMatrixGridApi(params.api)}
             animateRows={true}
-            rowHeight={45}
-            headerHeight={45}
+            headerHeight={48}
             groupHeaderHeight={42}
             getRowStyle={() => undefined}
             className="h-full w-full"
@@ -611,7 +617,12 @@ export default function DashboardPage() {
           <AgGridReact
             rowData={apiResponse?.channelBreakdown || []}
             columnDefs={channelColDefs}
-            defaultColDef={{ resizable: true }}
+            defaultColDef={{ 
+              resizable: true, 
+              wrapHeaderText: true, 
+              autoHeaderHeight: true, 
+              cellStyle: { textAlign: 'center' } 
+            }}
             animateRows={true}
             rowHeight={40}
             headerHeight={42}
