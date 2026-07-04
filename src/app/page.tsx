@@ -13,6 +13,132 @@ import DateRangePicker from "@/components/DateRangePicker"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
+interface SegmentMatrixRow {
+  metric: string;
+  [key: string]: any;
+}
+
+// Helper to transform flat segmentBreakdown to pivoted matrix rows
+function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
+  const metrics = ["R/N", "REVENUE", "ADR", "OCC"]
+  const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
+  const pyTypes = ["16PY", "35PY", "51PY"]
+
+  // Initialize rows
+  const rows: SegmentMatrixRow[] = metrics.map(metric => ({ metric }))
+
+  const getRow = (m: string) => rows.find(r => r.metric === m)!
+
+  const cellRN: { [key: string]: number } = {}
+  const cellREV: { [key: string]: number } = {}
+  const cellOCC: { [key: string]: number } = {}
+
+  // 1. Loop through raw breakdown data
+  if (Array.isArray(segmentBreakdown)) {
+    segmentBreakdown.forEach(item => {
+      // Handle both new format (segment, pyType) and old format (segment_name, facility_name)
+      const segNameRaw = item.segment || item.segment_name || ""
+      const segName = segments.find(s => s === segNameRaw) || "기타"
+
+      // Normalize pyType
+      let py = item.pyType || item.room_type || item.facility_name || ""
+      if (py.includes("16")) py = "16PY"
+      else if (py.includes("35")) py = "35PY"
+      else if (py.includes("51")) py = "51PY"
+      else py = "16PY" // default fallback
+
+      const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0)
+      const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0)
+      const occ = Number(item.occ || 0)
+
+      const cellKey = `${segName}_${py}`
+      cellRN[cellKey] = (cellRN[cellKey] || 0) + rn
+      cellREV[cellKey] = (cellREV[cellKey] || 0) + rev
+      cellOCC[cellKey] = occ
+    })
+  }
+
+  // Populate segment cells and calculate subtotals
+  segments.forEach(seg => {
+    let segTotalRN = 0
+    let segTotalREV = 0
+    let segTotalWeightedOCCSum = 0
+    let segTotalOccCount = 0
+
+    pyTypes.forEach(py => {
+      const cellKey = `${seg}_${py}`
+      const rn = cellRN[cellKey] || 0
+      const rev = cellREV[cellKey] || 0
+      const occ = cellOCC[cellKey] || 0
+      const adr = rn > 0 ? rev / rn : 0
+
+      getRow("R/N")[cellKey] = rn
+      getRow("REVENUE")[cellKey] = rev
+      getRow("ADR")[cellKey] = adr
+      getRow("OCC")[cellKey] = occ
+
+      segTotalRN += rn
+      segTotalREV += rev
+      if (occ > 0) {
+        segTotalWeightedOCCSum += occ * rn
+        segTotalOccCount += rn
+      }
+    })
+
+    const subtotalKey = `${seg}_소계`
+    getRow("R/N")[subtotalKey] = segTotalRN
+    getRow("REVENUE")[subtotalKey] = segTotalREV
+    getRow("ADR")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
+    getRow("OCC")[subtotalKey] = segTotalOccCount > 0 ? segTotalWeightedOCCSum / segTotalOccCount : 0
+  })
+
+  // Calculate overall totals (합계) for each pyType
+  let grandTotalRN = 0
+  let grandTotalREV = 0
+  let grandTotalWeightedOCCSum = 0
+  let grandTotalOccCount = 0
+
+  pyTypes.forEach(py => {
+    let pyTotalRN = 0
+    let pyTotalREV = 0
+    let pyTotalWeightedOCCSum = 0
+    let pyTotalOccCount = 0
+
+    segments.forEach(seg => {
+      const cellKey = `${seg}_${py}`
+      const rn = cellRN[cellKey] || 0
+      const rev = cellREV[cellKey] || 0
+      const occ = cellOCC[cellKey] || 0
+
+      pyTotalRN += rn
+      pyTotalREV += rev
+      if (occ > 0) {
+        pyTotalWeightedOCCSum += occ * rn
+        pyTotalOccCount += rn
+      }
+    })
+
+    const totalKey = `합계_${py}`
+    getRow("R/N")[totalKey] = pyTotalRN
+    getRow("REVENUE")[totalKey] = pyTotalREV
+    getRow("ADR")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
+    getRow("OCC")[totalKey] = pyTotalOccCount > 0 ? pyTotalWeightedOCCSum / pyTotalOccCount : 0
+
+    grandTotalRN += pyTotalRN
+    grandTotalREV += pyTotalREV
+    grandTotalWeightedOCCSum += pyTotalWeightedOCCSum
+    grandTotalOccCount += pyTotalOccCount
+  })
+
+  const grandKey = "합계_총계"
+  getRow("R/N")[grandKey] = grandTotalRN
+  getRow("REVENUE")[grandKey] = grandTotalREV
+  getRow("ADR")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
+  getRow("OCC")[grandKey] = grandTotalOccCount > 0 ? grandTotalWeightedOCCSum / grandTotalOccCount : 0
+
+  return rows
+}
+
 export default function DashboardPage() {
   const [startDate, setStartDate] = useState<string>(format(subDays(new Date(), 1), "yyyy-MM-dd"))
   const [endDate, setEndDate] = useState<string>(format(new Date(), "yyyy-MM-dd"))
@@ -20,6 +146,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [gridApi, setGridApi] = useState<any>(null)
+  const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -46,22 +173,121 @@ export default function DashboardPage() {
     }
   }
 
-  // Helper to format values nicely based on name/category
+  // Format values for the Facility Detail Grid
   const formatVal = (val: any, name: string) => {
     if (val === undefined || val === null || val === "") return "-"
     const num = Number(val)
     if (isNaN(num)) return val
 
-    // KPI(Occupied Rooms 등)는 ₩ 기호 제외하고 수량만 표기
     if (name === "Occupied Rooms" || name === "Rooms Sold") {
       return Math.round(num).toLocaleString()
     }
-
-    // 그 외 재무 매출 지표는 ₩ 기호 표기
     return `₩${Math.round(num).toLocaleString()}`
   }
 
-  // Column Definitions matching dailyReportBreakdown
+  // Format values for the Matrix Grid
+  const formatMatrixVal = (val: any, metric: string) => {
+    if (val === undefined || val === null || val === "") return "-"
+    const num = Number(val)
+    if (isNaN(num)) return val
+
+    if (metric === "R/N") {
+      return Math.round(num).toLocaleString()
+    }
+    if (metric === "REVENUE" || metric === "ADR") {
+      return `₩${Math.round(num).toLocaleString()}`
+    }
+    if (metric === "OCC") {
+      return `${(num * 100).toFixed(1)}%`
+    }
+    return val
+  }
+
+  // Segment PY Matrix Column Definitions
+  const matrixColDefs = useMemo<ColDef[]>(() => {
+    const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
+    const pyTypes = ["16PY", "35PY", "51PY"]
+
+    const cols: ColDef[] = [
+      { 
+        field: "metric", 
+        headerName: "지표", 
+        pinned: "left", 
+        width: 110,
+        cellStyle: { fontWeight: 'bold', backgroundColor: '#111827' }
+      }
+    ]
+
+    // 합계 Group
+    cols.push({
+      headerName: "합계",
+      children: [
+        { 
+          field: "합계_16PY", 
+          headerName: "16PY", 
+          width: 90,
+          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+        },
+        { 
+          field: "합계_35PY", 
+          headerName: "35PY", 
+          width: 90,
+          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+        },
+        { 
+          field: "합계_51PY", 
+          headerName: "51PY", 
+          width: 90,
+          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+        },
+        { 
+          field: "합계_총계", 
+          headerName: "총계", 
+          width: 110,
+          cellStyle: { fontWeight: 'bold', backgroundColor: '#312e81', color: '#f3f4f6' },
+          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+        }
+      ]
+    })
+
+    // Segments Group
+    segments.forEach(seg => {
+      cols.push({
+        headerName: seg,
+        children: [
+          { 
+            field: `${seg}_16PY`, 
+            headerName: "16PY", 
+            width: 85,
+            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+          },
+          { 
+            field: `${seg}_35PY`, 
+            headerName: "35PY", 
+            width: 85,
+            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+          },
+          { 
+            field: `${seg}_51PY`, 
+            headerName: "51PY", 
+            width: 85,
+            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+          },
+          { 
+            field: `${seg}_소계`, 
+            headerName: "소계", 
+            width: 95,
+            cellStyle: { fontWeight: 'bold', backgroundColor: '#1e1b4b' },
+            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+          }
+        ]
+      })
+    })
+
+    return cols
+  }, [])
+
+  // Facility Detail Column Definitions
   const colDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
     { field: "category", headerName: "분류", filter: true, sortable: true, width: 110 },
     { field: "name", headerName: "항목명", filter: true, sortable: true, width: 180 },
@@ -115,7 +341,10 @@ export default function DashboardPage() {
     }
   ], [])
 
-  // Chart Data preparation
+  const matrixRowData = useMemo(() => {
+    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [])
+  }, [apiResponse])
+
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.chartData) return []
     return apiResponse.chartData.map(item => ({
@@ -125,12 +354,12 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   return (
-    <div className="space-y-6 flex flex-col h-full">
+    <div className="space-y-8 flex flex-col h-full">
       {/* Header Actions */}
       <div className="relative z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
         <div>
           <h1 className="text-2xl font-bold text-gray-100">유형별 매출 현황</h1>
-          <p className="text-sm text-gray-400 mt-1">지정된 기간 동안의 세그먼트별 매출 실적을 집계합니다.</p>
+          <p className="text-sm text-gray-400 mt-1">지정된 기간 동안의 세그먼트별 및 부서별 실적을 집계합니다.</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -199,6 +428,58 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭)</h2>
+          <span className="text-xs text-indigo-400 bg-indigo-950/50 px-2 py-1 rounded border border-indigo-900/50">구글 시트 상단 기준</span>
+        </div>
+        <div className="h-[240px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            rowData={matrixRowData}
+            columnDefs={matrixColDefs}
+            defaultColDef={{ resizable: true }}
+            onGridReady={(params) => setMatrixGridApi(params.api)}
+            animateRows={true}
+            getRowStyle={(params) => {
+              if (params.data?.metric === "REVENUE" || params.data?.metric === "ADR") {
+                return { backgroundColor: '#111827/30' }
+              }
+              return undefined
+            }}
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+
+      {/* 2. 영업 부서별 매출 상세 (Departmental Revenue Breakdown) */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-bold text-gray-200">2. 영업 부서별 매출 상세 (일매출보고서)</h2>
+          <span className="text-xs text-teal-400 bg-teal-950/50 px-2 py-1 rounded border border-teal-900/50">구글 시트 하단 기준</span>
+        </div>
+        <div className="h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            rowData={apiResponse?.dailyReportBreakdown || []}
+            columnDefs={colDefs}
+            defaultColDef={{ resizable: true }}
+            onGridReady={(params) => setGridApi(params.api)}
+            animateRows={true}
+            getRowStyle={(params) => {
+              const name = params.data?.name || ""
+              if (name.includes("Total") || name.includes("Grand")) {
+                return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#f3f4f6' }
+              }
+              if (params.data?.category === "KPI") {
+                return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' }
+              }
+              return undefined
+            }}
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+
       {/* Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-3 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
@@ -218,33 +499,10 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {/* Data Grid Section */}
-      <div className="flex-1 min-h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-        <AgGridReact
-          rowData={apiResponse?.dailyReportBreakdown || []}
-          columnDefs={colDefs}
-          defaultColDef={{ resizable: true }}
-          onGridReady={(params) => setGridApi(params.api)}
-          animateRows={true}
-          getRowStyle={(params) => {
-            const name = params.data?.name || ""
-            if (name.includes("Total") || name.includes("Grand")) {
-              return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#f3f4f6' }
-            }
-            if (params.data?.category === "KPI") {
-              return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' }
-            }
-            return undefined
-          }}
-          className="h-full w-full"
-        />
-      </div>
     </div>
   )
 }
 
-// Simple ISO parser helper to avoid dependency issues
 function parseISO(dateString: string): Date {
   const parts = dateString.split("-")
   return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
