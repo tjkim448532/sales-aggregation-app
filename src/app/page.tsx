@@ -140,8 +140,8 @@ function buildSegmentMatrix(segmentBreakdown: any[]): SegmentMatrixRow[] {
 }
 
 export default function DashboardPage() {
-  const [startDate, setStartDate] = useState<string>(format(subDays(new Date(), 1), "yyyy-MM-dd"))
-  const [endDate, setEndDate] = useState<string>(format(new Date(), "yyyy-MM-dd"))
+  const [startDate, setStartDate] = useState<string>("2026-06-01")
+  const [endDate, setEndDate] = useState<string>("2026-06-30")
   const [apiResponse, setApiResponse] = useState<V3RevenueResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
