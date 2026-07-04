@@ -11,6 +11,18 @@ export interface V3ChartDataItem {
   value: number;
 }
 
+export interface V3ReportBreakdownItem {
+  category: string;
+  name: string;
+  facility_name?: string;
+  today_actual: string | number;
+  today_ly: string | number;
+  mtd_actual: string | number;
+  mtd_ly: string | number;
+  ytd_actual: string | number;
+  ytd_ly: string | number;
+}
+
 export interface V3RevenueResponse {
   startDate: string;
   endDate: string;
@@ -20,6 +32,7 @@ export interface V3RevenueResponse {
   ytd: { actual: number; ly_actual: number };
   gridData: V3GridDataItem[];
   chartData: V3ChartDataItem[];
+  dailyReportBreakdown: V3ReportBreakdownItem[];
 }
 
 export interface Targets {
@@ -41,11 +54,9 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
     return null;
   }
 
+  // 백엔드 미들웨어 비활성화로 Authorization 헤더 제거
   const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
     cache: "no-store",
-    headers: {
-      "Authorization": "Bearer mock_super_admin_token",
-    }
   });
 
   if (!response.ok) {

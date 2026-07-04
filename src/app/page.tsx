@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3GridDataItem } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 
@@ -46,38 +46,72 @@ export default function DashboardPage() {
     }
   }
 
-  // Column Definitions
-  const colDefs = useMemo<ColDef<V3GridDataItem>[]>(() => [
-    { field: "depth1", headerName: "대분류", filter: true, sortable: true, width: 140 },
-    { field: "depth2", headerName: "중분류", filter: true, sortable: true, width: 150 },
-    { field: "depth3", headerName: "소분류", filter: true, sortable: true, width: 160 },
+  // Helper to format values nicely based on name/category
+  const formatVal = (val: any, name: string) => {
+    if (val === undefined || val === null || val === "") return "-"
+    const num = Number(val)
+    if (isNaN(num)) return val
+
+    // KPI(Occupied Rooms 등)는 ₩ 기호 제외하고 수량만 표기
+    if (name === "Occupied Rooms" || name === "Rooms Sold") {
+      return Math.round(num).toLocaleString()
+    }
+
+    // 그 외 재무 매출 지표는 ₩ 기호 표기
+    return `₩${Math.round(num).toLocaleString()}`
+  }
+
+  // Column Definitions matching dailyReportBreakdown
+  const colDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
+    { field: "category", headerName: "분류", filter: true, sortable: true, width: 110 },
+    { field: "name", headerName: "항목명", filter: true, sortable: true, width: 180 },
     { 
-      field: "quantity", 
-      headerName: "수량/객실수", 
+      field: "today_actual", 
+      headerName: "금일 실적", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
       width: 140, 
-      valueFormatter: (p) => p.value?.toLocaleString() || "0" 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
     { 
-      field: "salesAmount", 
-      headerName: "매출(금액)", 
+      field: "today_ly", 
+      headerName: "금일 전년", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 140, 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
+    },
+    { 
+      field: "mtd_actual", 
+      headerName: "당월 누적 (MTD)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 165, 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
+    },
+    { 
+      field: "mtd_ly", 
+      headerName: "당월 전년 (MTD LY)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 165, 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
+    },
+    { 
+      field: "ytd_actual", 
+      headerName: "연간 누적 (YTD)", 
       filter: "agNumberColumnFilter", 
       sortable: true, 
       width: 180, 
-      valueFormatter: (p) => `₩${p.value?.toLocaleString() || "0"}` 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     },
-    {
-      headerName: "평균단가(ADR)",
-      filter: "agNumberColumnFilter",
-      sortable: true,
-      width: 160,
-      valueGetter: (p) => {
-        const qty = p.data?.quantity || 0;
-        const sales = p.data?.salesAmount || 0;
-        return qty > 0 ? Math.round(sales / qty) : 0;
-      },
-      valueFormatter: (p) => `₩${p.value?.toLocaleString() || "0"}`
+    { 
+      field: "ytd_ly", 
+      headerName: "연간 전년 (YTD LY)", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 180, 
+      valueFormatter: (p) => formatVal(p.value, p.data?.name || "") 
     }
   ], [])
 
@@ -88,17 +122,6 @@ export default function DashboardPage() {
       name: item.name,
       revenue: item.value
     }))
-  }, [apiResponse])
-
-  // Total Summary values for the selected period (sum of all gridData rows)
-  const totalRevenue = useMemo(() => {
-    if (!apiResponse || !apiResponse.gridData) return 0
-    return apiResponse.gridData.reduce((acc, curr) => acc + (curr.salesAmount || 0), 0)
-  }, [apiResponse])
-
-  const totalQuantity = useMemo(() => {
-    if (!apiResponse || !apiResponse.gridData) return 0
-    return apiResponse.gridData.reduce((acc, curr) => acc + (curr.quantity || 0), 0)
   }, [apiResponse])
 
   return (
@@ -153,12 +176,7 @@ export default function DashboardPage() {
       {/* KPI Dashboard Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회기간 합계 매출</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{totalRevenue.toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">총 수량: {totalQuantity.toLocaleString()}</p>
-        </div>
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">당일 실제 매출 (TODAY)</h4>
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회일 기준 실제 매출 (TODAY)</h4>
           <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.today?.actual || 0).toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today?.ly_actual || 0).toLocaleString()}</p>
         </div>
@@ -172,11 +190,18 @@ export default function DashboardPage() {
           <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.ytd?.actual || 0).toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.ytd?.ly_actual || 0).toLocaleString()}</p>
         </div>
+        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md flex flex-col justify-center">
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회 범위 기준 데이터 일자</h4>
+          <p className="text-lg font-bold text-indigo-300 mt-2">
+            {apiResponse?.date ? format(parseISO(apiResponse.date), "yyyy년 MM월 dd일") : "날짜 지정 대기"}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">조회기간: {startDate} ~ {endDate}</p>
+        </div>
       </div>
 
       {/* Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
+        <div className="lg:col-span-3 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
           <h3 className="text-sm font-medium text-gray-400 mb-4">대분류별 매출 현황 (Revenue Summary)</h3>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 0, right: 0, left: 20, bottom: 20 }}>
@@ -192,32 +217,26 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80 flex flex-col justify-center items-center text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl -mr-8 -mt-8"></div>
-          <div className="p-4 rounded-full bg-indigo-900/30 mb-4 z-10">
-            <Search className="text-indigo-400 w-8 h-8" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-200 mb-2 z-10">조회 범위 일일 서버 시간</h3>
-          <p className="text-3xl font-bold text-white mb-1 z-10">
-            {apiResponse?.date ? format(parseISO(apiResponse.date), "yyyy년 MM월 dd일") : "날짜 지정 대기"}
-          </p>
-          <p className="text-sm text-gray-400 z-10">
-            조회 기간: {startDate} ~ {endDate}
-          </p>
-        </div>
       </div>
 
       {/* Data Grid Section */}
-      <div className="flex-1 min-h-[400px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+      <div className="flex-1 min-h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
         <AgGridReact
-          rowData={apiResponse?.gridData || []}
+          rowData={apiResponse?.dailyReportBreakdown || []}
           columnDefs={colDefs}
           defaultColDef={{ resizable: true }}
           onGridReady={(params) => setGridApi(params.api)}
           animateRows={true}
-          rowSelection="multiple"
-          suppressRowClickSelection={true}
+          getRowStyle={(params) => {
+            const name = params.data?.name || ""
+            if (name.includes("Total") || name.includes("Grand")) {
+              return { fontWeight: 'bold', backgroundColor: '#1e1b4b', color: '#f3f4f6' }
+            }
+            if (params.data?.category === "KPI") {
+              return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' }
+            }
+            return undefined
+          }}
           className="h-full w-full"
         />
       </div>
