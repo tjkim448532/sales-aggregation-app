@@ -449,7 +449,7 @@ export default function DashboardPage() {
               if (metric === "REVENUE" || metric === "ADR") {
                 return { backgroundColor: '#1e293b', color: '#ffffff' } as any
               }
-              return { color: '#ffffff' } as any
+              return undefined
             }}
             className="h-full w-full"
           />
@@ -479,7 +479,7 @@ export default function DashboardPage() {
               if (params.data?.category === "KPI") {
                 return { backgroundColor: '#111827', color: '#818cf8', fontWeight: '500' } as any
               }
-              return { color: '#e5e7eb' } as any
+              return undefined
             }}
             className="h-full w-full"
           />
