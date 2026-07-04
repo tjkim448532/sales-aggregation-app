@@ -478,7 +478,7 @@ export default function DashboardPage() {
       {/* KPI Dashboard Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회일 기준 실제 매출 (TODAY)</h4>
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">선택 기간 실제 매출</h4>
           <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.today?.actual || 0).toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today?.ly_actual || 0).toLocaleString()}</p>
         </div>

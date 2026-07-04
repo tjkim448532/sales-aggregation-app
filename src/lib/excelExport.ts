@@ -190,7 +190,7 @@ export async function exportDashboardToExcel(
   worksheet.getCell(currRow, 1).font = fontSectionHeader;
   currRow += 1;
 
-  const kpiHeaders = ["지표", "금일 실적 (TODAY)", "금일 전년 동기", "당월 누적 (MTD)", "당월 전년 동기 (MTD LY)", "연간 누적 (YTD)", "연간 전년 동기 (YTD LY)"];
+  const kpiHeaders = ["지표", "선택 기간 실적", "선택 기간 전년 동기", "당월 누적 (MTD)", "당월 전년 동기 (MTD LY)", "연간 누적 (YTD)", "연간 전년 동기 (YTD LY)"];
   const kpiHeaderRow = worksheet.getRow(currRow);
   kpiHeaderRow.values = kpiHeaders;
   kpiHeaderRow.height = 24;
