@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { Target, Save, CheckCircle2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Target, Save, CheckCircle2, AlertCircle } from "lucide-react"
+import { fetchTargets, saveTargets } from "@/lib/api"
 
 export default function TargetsPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear())
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1)
   const [isSaving, setIsSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
 
   const [targets, setTargets] = useState({
     targetRn: 500,
@@ -15,14 +17,45 @@ export default function TargetsPage() {
     targetOcc: 80, // percentage integer
   })
 
-  const handleSave = () => {
+  useEffect(() => {
+    const loadTargets = async () => {
+      try {
+        setErrorMsg("")
+        const data = await fetchTargets(year, month)
+        if (data) {
+          setTargets({
+            targetRn: data.targetRn ?? 0,
+            targetRev: data.targetRev ?? 0,
+            targetOcc: data.targetOcc ?? 0,
+          })
+        }
+      } catch (err: any) {
+        console.error("Failed to load targets:", err)
+        // Keep current targets as default if load fails (e.g. backend not set up or no data yet)
+      }
+    }
+    loadTargets()
+  }, [year, month])
+
+  const handleSave = async () => {
     setIsSaving(true)
-    // Simulate API call to POST /api/targets
-    setTimeout(() => {
-      setIsSaving(false)
+    setErrorMsg("")
+    try {
+      await saveTargets({
+        year,
+        month,
+        targetRn: targets.targetRn,
+        targetRev: targets.targetRev,
+        targetOcc: targets.targetOcc,
+      })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 3000)
-    }, 800)
+    } catch (err: any) {
+      console.error("Failed to save targets:", err)
+      setErrorMsg("목표 저장에 실패했습니다. 백엔드 API 연결을 확인하세요.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -103,6 +136,12 @@ export default function TargetsPage() {
         </div>
 
         <div className="mt-8 flex justify-end items-center gap-4">
+          {errorMsg && (
+            <div className="flex items-center gap-2 text-rose-400">
+              <AlertCircle size={18} />
+              <span className="text-sm">{errorMsg}</span>
+            </div>
+          )}
           {showSuccess && (
             <div className="flex items-center gap-2 text-emerald-400">
               <CheckCircle2 size={18} />

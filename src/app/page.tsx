@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type DailyRevenueData } from "@/lib/mockData"
+import { fetchDailyRevenue, type DailyRevenueData } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 
@@ -72,7 +72,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 flex flex-col h-full">
       {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
+      <div className="relative z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
         <div>
           <h1 className="text-2xl font-bold text-gray-100">유형별 매출 현황</h1>
           <p className="text-sm text-gray-400 mt-1">지정된 기간 동안의 세그먼트별 매출 실적을 집계합니다.</p>
