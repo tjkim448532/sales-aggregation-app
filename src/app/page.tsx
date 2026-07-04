@@ -4,14 +4,14 @@ import { useState, useMemo, useEffect } from "react"
 import { format, subDays } from "date-fns"
 import { Download, Search, RefreshCw } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
-import { ColDef, ModuleRegistry, ClientSideRowModelModule } from "ag-grid-community"
+import { ColDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
 import { fetchDailyRevenue, type DailyRevenueData } from "@/lib/mockData"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 
-ModuleRegistry.registerModules([ClientSideRowModelModule])
+ModuleRegistry.registerModules([AllCommunityModule])
 
 export default function DashboardPage() {
   const [startDate, setStartDate] = useState<string>(format(subDays(new Date(), 1), "yyyy-MM-dd"))
