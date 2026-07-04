@@ -352,10 +352,10 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const chartData = useMemo(() => {
-    if (!apiResponse || !apiResponse.chartData) return []
-    return apiResponse.chartData.map(item => ({
-      name: item.name,
-      revenue: item.value
+    if (!apiResponse || !apiResponse.channelBreakdown) return []
+    return apiResponse.channelBreakdown.map(item => ({
+      name: item.channel_name,
+      revenue: Math.round(Number(item.today_actual || 0) / 1000)
     }))
   }, [apiResponse])
 
@@ -517,16 +517,19 @@ export default function DashboardPage() {
       {/* Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-3 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
-          <h3 className="text-sm font-medium text-gray-400 mb-4">대분류별 매출 현황 (Revenue Summary)</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-semibold text-gray-200">예약 채널별 매출 현황 (Revenue by Channel)</h3>
+            <span className="text-[10px] text-teal-400 bg-teal-950/50 px-2 py-0.5 rounded border border-teal-900/50">000원 단위 절사</span>
+          </div>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 0, right: 0, left: 20, bottom: 20 }}>
+            <BarChart data={chartData} margin={{ top: 10, right: 0, left: 10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
               <XAxis dataKey="name" stroke="#9CA3AF" tick={{ fill: '#9CA3AF' }} />
-              <YAxis stroke="#9CA3AF" tick={{ fill: '#9CA3AF' }} tickFormatter={(val) => `₩${(val/10000).toLocaleString()}만`} />
+              <YAxis stroke="#9CA3AF" tick={{ fill: '#9CA3AF' }} tickFormatter={(val) => val.toLocaleString()} />
               <Tooltip 
                 cursor={{ fill: '#374151', opacity: 0.4 }}
                 contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#F3F4F6' }}
-                formatter={(value: any) => [`₩${Number(value).toLocaleString()}`, '매출']}
+                formatter={(value: any) => [`${Number(value).toLocaleString()} 천원`, '매출']}
               />
               <Bar dataKey="revenue" fill="#4F46E5" radius={[4, 4, 0, 0]} />
             </BarChart>
