@@ -22,18 +22,14 @@ interface SegmentMatrixRow {
 }
 
 // Helper to transform flat segmentBreakdown to pivoted matrix rows
-function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentMatrixRow[] {
+function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacities: { [key: string]: number }): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"]
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
   const pyTypes = ["16PY", "35PY", "51PY"]
 
-  // Initialize capacities mapping (16평 + 펫룸 16평 = 70, 35평 + 펫룸 35평 = 106, 51평 = 38)
-  const capacities: { [key: string]: number } = {
-    "16PY": 70,
-    "35PY": 106,
-    "51PY": 38
-  }
-  const totalDailyCapacity = 214 // 70 + 106 + 38
+  const cap16 = capacities["16PY"] || 90
+  const cap35 = capacities["35PY"] || 90
+  const totalCapacity = cap16 + cap35
 
   // Initialize rows
   const rows: SegmentMatrixRow[] = metrics.map(metric => ({ metric }))
@@ -70,19 +66,29 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
     let segTotalRN = 0
     let segTotalREV = 0
 
+    const rn16 = cellRN[`${seg}_16PY`] || 0
+    const rn35 = cellRN[`${seg}_35PY`] || 0
+    const rn51 = cellRN[`${seg}_51PY`] || 0
+
     pyTypes.forEach(py => {
       const cellKey = `${seg}_${py}`
       const rn = cellRN[cellKey] || 0
       const rev = cellREV[cellKey] || 0
       const adr = rn > 0 ? rev / rn : 0
       
-      const capacity = capacities[py] || 70
-      const occ = (rn / (capacity * diffDays)) * 100
+      let occVal: any = 0
+      if (py === "16PY") {
+        occVal = cap16 > 0 ? ((rn16 + rn51) / (cap16 * diffDays)) * 100 : 0
+      } else if (py === "35PY") {
+        occVal = cap35 > 0 ? ((rn35 + rn51) / (cap35 * diffDays)) * 100 : 0
+      } else if (py === "51PY") {
+        occVal = "-" // 51평 단독 가동률은 산출 불가(-) 처리
+      }
 
       getRow("판매객실수(R/N)")[cellKey] = rn
       getRow("매출액")[cellKey] = rev
       getRow("객단가(ADR)")[cellKey] = adr
-      getRow("가동률(OCC)")[cellKey] = occ
+      getRow("가동률(OCC)")[cellKey] = occVal
 
       segTotalRN += rn
       segTotalREV += rev
@@ -92,12 +98,18 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
     getRow("판매객실수(R/N)")[subtotalKey] = segTotalRN
     getRow("매출액")[subtotalKey] = segTotalREV
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
-    getRow("가동률(OCC)")[subtotalKey] = (segTotalRN / (totalDailyCapacity * diffDays)) * 100
+    
+    // Subtotal OCC: { 16PY + 35PY + (51PY * 2) } / (totalCapacity * diffDays) * 100
+    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + (rn51 * 2)) / (totalCapacity * diffDays)) * 100 : 0
   })
 
   // Calculate overall totals (합계) for each pyType
   let grandTotalRN = 0
   let grandTotalREV = 0
+
+  let totalRN16 = 0
+  let totalRN35 = 0
+  let totalRN51 = 0
 
   pyTypes.forEach(py => {
     let pyTotalRN = 0
@@ -112,13 +124,24 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
       pyTotalREV += rev
     })
 
+    if (py === "16PY") totalRN16 = pyTotalRN
+    else if (py === "35PY") totalRN35 = pyTotalRN
+    else if (py === "51PY") totalRN51 = pyTotalRN
+
     const totalKey = `합계_${py}`
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
     getRow("매출액")[totalKey] = pyTotalREV
     getRow("객단가(ADR)")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
     
-    const capacity = capacities[py] || 70
-    getRow("가동률(OCC)")[totalKey] = (pyTotalRN / (capacity * diffDays)) * 100
+    let pyOccVal: any = 0
+    if (py === "16PY") {
+      pyOccVal = cap16 > 0 ? ((pyTotalRN + totalRN51) / (cap16 * diffDays)) * 100 : 0
+    } else if (py === "35PY") {
+      pyOccVal = cap35 > 0 ? ((pyTotalRN + totalRN51) / (cap35 * diffDays)) * 100 : 0
+    } else if (py === "51PY") {
+      pyOccVal = "-"
+    }
+    getRow("가동률(OCC)")[totalKey] = pyOccVal
 
     grandTotalRN += pyTotalRN
     grandTotalREV += pyTotalREV
@@ -128,9 +151,9 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
   getRow("매출액")[grandKey] = grandTotalREV
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("가동률(OCC)")[grandKey] = (grandTotalRN / (totalDailyCapacity * diffDays)) * 100
+  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + (totalRN51 * 2)) / (totalCapacity * diffDays)) * 100 : 0
 
-  return rows
+  return rows;
 }
 
 export default function DashboardPage() {
@@ -179,25 +202,67 @@ export default function DashboardPage() {
     loadTargetConfig()
   }, [endDate])
 
-  const actualRn = useMemo(() => {
-    if (!apiResponse || !Array.isArray(apiResponse.dailyReportBreakdown)) return 0
-    const occupiedItem = apiResponse.dailyReportBreakdown.find(x => x.name === "Occupied Rooms")
-    return occupiedItem ? Number(occupiedItem.mtd_actual || 0) : 0
+  const diffDays = useMemo(() => {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const diffTime = Math.abs(end.getTime() - start.getTime())
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+  }, [startDate, endDate])
+
+  const dynamicCapacities = useMemo(() => {
+    const caps = { "16PY": 90, "35PY": 90, "51PY": 0 }
+    if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
+      apiResponse.roomTypeBreakdown.forEach((item: any) => {
+        const name = item.room_type || item.facility_name || ""
+        const cap = Number(item.capacity || item.total_capacity || 0)
+        if (name.includes("16")) {
+          caps["16PY"] = cap
+        } else if (name.includes("35")) {
+          caps["35PY"] = cap
+        } else if (name.includes("51")) {
+          caps["51PY"] = cap
+        }
+      })
+    }
+    return caps
   }, [apiResponse])
+
+  const periodRoomsSold = useMemo(() => {
+    let sold16 = 0
+    let sold35 = 0
+    let sold51 = 0
+
+    if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
+      apiResponse.segmentBreakdown.forEach(item => {
+        let py = item.pyType || item.room_type || item.facility_name || ""
+        const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0)
+        
+        if (py.includes("16")) sold16 += rn
+        else if (py.includes("35")) sold35 += rn
+        else if (py.includes("51")) sold51 += rn
+      })
+    }
+
+    return { sold16, sold35, sold51 }
+  }, [apiResponse])
+
+  const actualRn = useMemo(() => {
+    // 51평 예약건은 물리적 객실 2개를 소모하므로 가중치(*2)를 더합니다.
+    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + (periodRoomsSold.sold51 * 2)
+  }, [periodRoomsSold])
 
   const actualRev = useMemo(() => {
     return apiResponse?.mtd?.actual || 0
   }, [apiResponse])
 
   const actualOcc = useMemo(() => {
-    if (actualRn === 0) return 0
-    const parts = endDate.split("-")
-    const year = parseInt(parts[0])
-    const month = parseInt(parts[1])
-    const daysInMonth = new Date(year, month, 0).getDate()
-    const totalCapacity = 214
-    return daysInMonth > 0 ? (actualRn / (totalCapacity * daysInMonth)) * 100 : 0
-  }, [actualRn, endDate])
+    const cap16 = dynamicCapacities["16PY"] || 90
+    const cap35 = dynamicCapacities["35PY"] || 90
+    const totalCap = cap16 + cap35
+
+    if (totalCap === 0) return 0
+    return (actualRn / (totalCap * diffDays)) * 100
+  }, [actualRn, dynamicCapacities, diffDays])
 
   const exportToExcel = async () => {
     try {
@@ -384,16 +449,9 @@ export default function DashboardPage() {
     }
   ], [])
 
-  const diffDays = useMemo(() => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    const diffTime = Math.abs(end.getTime() - start.getTime())
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-  }, [startDate, endDate])
-
   const matrixRowData = useMemo(() => {
-    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [], diffDays)
-  }, [apiResponse, diffDays])
+    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [], diffDays, dynamicCapacities)
+  }, [apiResponse, diffDays, dynamicCapacities])
 
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.channelBreakdown) return []

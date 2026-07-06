@@ -54,6 +54,7 @@ export interface V3RevenueResponse {
   segmentBreakdown: any[];
   channelBreakdown: V3ChannelBreakdownItem[];
   rateCodeBreakdown: V3RateCodeBreakdownItem[];
+  roomTypeBreakdown?: any[];
 }
 
 export interface Targets {

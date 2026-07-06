@@ -8,18 +8,14 @@ interface SegmentMatrixRow {
   [key: string]: any;
 }
 
-function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentMatrixRow[] {
+function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacities: { [key: string]: number }): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"];
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"];
   const pyTypes = ["16PY", "35PY", "51PY"];
 
-  // Initialize capacities mapping (16평 + 펫룸 16평 = 70, 35평 + 펫룸 35평 = 106, 51평 = 38)
-  const capacities: { [key: string]: number } = {
-    "16PY": 70,
-    "35PY": 106,
-    "51PY": 38
-  };
-  const totalDailyCapacity = 214; // 70 + 106 + 38
+  const cap16 = capacities["16PY"] || 90;
+  const cap35 = capacities["35PY"] || 90;
+  const totalCapacity = cap16 + cap35;
 
   const rows: SegmentMatrixRow[] = metrics.map(metric => ({ metric }));
   const getRow = (m: string) => rows.find(r => r.metric === m)!;
@@ -51,19 +47,29 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): Segm
     let segTotalRN = 0;
     let segTotalREV = 0;
 
+    const rn16 = cellRN[`${seg}_16PY`] || 0;
+    const rn35 = cellRN[`${seg}_35PY`] || 0;
+    const rn51 = cellRN[`${seg}_51PY`] || 0;
+
     pyTypes.forEach(py => {
       const cellKey = `${seg}_${py}`;
       const rn = cellRN[cellKey] || 0;
       const rev = cellREV[cellKey] || 0;
       const adr = rn > 0 ? rev / rn : 0;
       
-      const capacity = capacities[py] || 70;
-      const occ = rn / (capacity * diffDays); // Fractional value for Excel formatting
+      let occVal: any = 0;
+      if (py === "16PY") {
+        occVal = cap16 > 0 ? (rn16 + rn51) / (cap16 * diffDays) : 0;
+      } else if (py === "35PY") {
+        occVal = cap35 > 0 ? (rn35 + rn51) / (cap35 * diffDays) : 0;
+      } else if (py === "51PY") {
+        occVal = "-"; // 51평 단독 가동률은 산출 불가(-) 처리
+      }
 
       getRow("판매객실수(R/N)")[cellKey] = rn;
       getRow("매출액")[cellKey] = rev;
       getRow("객단가(ADR)")[cellKey] = adr;
-      getRow("가동률(OCC)")[cellKey] = occ;
+      getRow("가동률(OCC)")[cellKey] = occVal;
 
       segTotalRN += rn;
       segTotalREV += rev;
@@ -73,11 +79,15 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): Segm
     getRow("판매객실수(R/N)")[subtotalKey] = segTotalRN;
     getRow("매출액")[subtotalKey] = segTotalREV;
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0;
-    getRow("가동률(OCC)")[subtotalKey] = segTotalRN / (totalDailyCapacity * diffDays);
+    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? (rn16 + rn35 + (rn51 * 2)) / (totalCapacity * diffDays) : 0;
   });
 
   let grandTotalRN = 0;
   let grandTotalREV = 0;
+
+  let totalRN16 = 0;
+  let totalRN35 = 0;
+  let totalRN51 = 0;
 
   pyTypes.forEach(py => {
     let pyTotalRN = 0;
@@ -92,13 +102,24 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): Segm
       pyTotalREV += rev;
     });
 
+    if (py === "16PY") totalRN16 = pyTotalRN;
+    else if (py === "35PY") totalRN35 = pyTotalRN;
+    else if (py === "51PY") totalRN51 = pyTotalRN;
+
     const totalKey = `합계_${py}`;
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN;
     getRow("매출액")[totalKey] = pyTotalREV;
     getRow("객단가(ADR)")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0;
     
-    const capacity = capacities[py] || 70;
-    getRow("가동률(OCC)")[totalKey] = pyTotalRN / (capacity * diffDays);
+    let pyOccVal: any = 0;
+    if (py === "16PY") {
+      pyOccVal = cap16 > 0 ? (pyTotalRN + totalRN51) / (cap16 * diffDays) : 0;
+    } else if (py === "35PY") {
+      pyOccVal = cap35 > 0 ? (pyTotalRN + totalRN51) / (cap35 * diffDays) : 0;
+    } else if (py === "51PY") {
+      pyOccVal = "-";
+    }
+    getRow("가동률(OCC)")[totalKey] = pyOccVal;
 
     grandTotalRN += pyTotalRN;
     grandTotalREV += pyTotalREV;
@@ -108,7 +129,7 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number): Segm
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN;
   getRow("매출액")[grandKey] = grandTotalREV;
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0;
-  getRow("가동률(OCC)")[grandKey] = grandTotalRN / (totalDailyCapacity * diffDays);
+  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? (totalRN16 + totalRN35 + (totalRN51 * 2)) / (totalCapacity * diffDays) : 0;
 
   return rows;
 }
@@ -407,8 +428,23 @@ export async function exportDashboardToExcel(
   const diffTime = Math.abs(dEnd.getTime() - dStart.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-  // Re-calculate the pivoted matrix rows
-  const matrixRows = calculateSegmentMatrix(apiResponse.segmentBreakdown || [], diffDays);
+  // Re-calculate the pivoted matrix rows using dynamic capacities
+  const caps: { [key: string]: number } = { "16PY": 90, "35PY": 90, "51PY": 0 };
+  if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
+    apiResponse.roomTypeBreakdown.forEach((item: any) => {
+      const name = item.room_type || item.facility_name || "";
+      const cap = Number(item.capacity || item.total_capacity || 0);
+      if (name.includes("16")) {
+        caps["16PY"] = cap;
+      } else if (name.includes("35")) {
+        caps["35PY"] = cap;
+      } else if (name.includes("51")) {
+        caps["51PY"] = cap;
+      }
+    });
+  }
+
+  const matrixRows = calculateSegmentMatrix(apiResponse.segmentBreakdown || [], diffDays, caps);
   matrixRows.forEach(row => {
     const r = worksheet.getRow(currRow);
     r.height = 22;
@@ -426,10 +462,15 @@ export async function exportDashboardToExcel(
       const isTotal = seg === "합계";
       const keySuffix = isTotal ? "" : "_소계";
 
-      const val16 = row[`${isTotal ? "합계" : seg}_16PY`] || 0;
-      const val35 = row[`${isTotal ? "합계" : seg}_35PY`] || 0;
-      const val51 = row[`${isTotal ? "합계" : seg}_51PY`] || 0;
-      const valSum = row[`${isTotal ? "합계" : seg}${isTotal ? "_총계" : "_소계"}`] || 0;
+      const getVal = (key: string) => {
+        const val = row[key];
+        return (val === undefined || val === null) ? 0 : val;
+      };
+
+      const val16 = getVal(`${isTotal ? "합계" : seg}_16PY`);
+      const val35 = getVal(`${isTotal ? "합계" : seg}_35PY`);
+      const val51 = getVal(`${isTotal ? "합계" : seg}_51PY`);
+      const valSum = getVal(`${isTotal ? "합계" : seg}${isTotal ? "_총계" : "_소계"}`);
 
       r.getCell(colIdx).value = val16;
       r.getCell(colIdx + 1).value = val35;
