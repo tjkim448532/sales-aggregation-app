@@ -687,7 +687,7 @@ export default function DashboardPage() {
               <span className="font-semibold text-indigo-300 text-xs block mb-2">① 수용량 및 기타 객실</span>
               <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
                 <li>• 총 물리 객실: <span className="text-white font-semibold">180실</span> (16평 90실, 35평 90실)</li>
-                <li>• <span className="text-white font-semibold">미매핑 객실</span> (72평, 카라반 등)은 <span className="text-indigo-400 font-semibold">기타</span> 열로 자동 흡수되어 매출 누락을 방지합니다.</li>
+                <li>• <span className="text-white font-semibold">기타 객실 분류</span>: 주요 평형(16평, 35평, 51평) 외의 실적은 <span className="text-indigo-400 font-semibold">기타</span> 항목으로 안전하게 자동 집계되어 총합 누락을 방지합니다.</li>
               </ul>
             </div>
           </div>
