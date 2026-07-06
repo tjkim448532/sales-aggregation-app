@@ -238,6 +238,7 @@ export default function DashboardPage() {
     let sold16 = 0
     let sold35 = 0
     let sold51 = 0
+    let soldEtc = 0
 
     if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
       apiResponse.segmentBreakdown.forEach(item => {
@@ -247,18 +248,28 @@ export default function DashboardPage() {
         if (py.includes("16")) sold16 += rn
         else if (py.includes("35")) sold35 += rn
         else if (py.includes("51")) sold51 += rn
+        else soldEtc += rn
       })
     }
 
-    return { sold16, sold35, sold51 }
+    return { sold16, sold35, sold51, soldEtc }
   }, [apiResponse])
 
   const actualRn = useMemo(() => {
-    // 51평 예약건은 물리적 객실 2개를 소모하므로 가중치(*2)를 더합니다.
-    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + (periodRoomsSold.sold51 * 2)
+    // 51평 예약건은 물리적 객실 2개를 소모하므로 가중치(*2)를 더하고, 기타 객실의 실적도 추가합니다.
+    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + (periodRoomsSold.sold51 * 2) + periodRoomsSold.soldEtc
   }, [periodRoomsSold])
 
   const actualRev = useMemo(() => {
+    // 가이드에 따라 대시보드 매출액 실적은 객실 부서 순매출(ROOM + ROOM OTHER)만 집계하여 비교해야 함
+    if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
+      const roomTotalItem = apiResponse.dailyReportBreakdown.find(
+        (x: any) => x.category === "ROOM" && (x.name === "객실 Total" || x.name === "ROOM")
+      )
+      if (roomTotalItem) {
+        return Number(roomTotalItem.mtd_actual || 0)
+      }
+    }
     return apiResponse?.mtd?.actual || 0
   }, [apiResponse])
 

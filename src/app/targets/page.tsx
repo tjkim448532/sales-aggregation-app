@@ -81,6 +81,23 @@ export default function TargetsPage() {
     setIsSaving(true)
     setErrorMsg("")
     try {
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const maxPossibleRn = daysInMonth * 180;
+      
+      if (targets.targetRn > maxPossibleRn) {
+        if (!confirm(`설정하신 목표 객실수(${targets.targetRn.toLocaleString()}실)이 해당 월의 최대 물리적 수용량(${maxPossibleRn.toLocaleString()}실)을 초과합니다. 그래도 저장하시겠습니까?`)) {
+          setIsSaving(false);
+          return;
+        }
+      }
+      
+      if (targets.targetOcc > 100) {
+        if (!confirm(`설정하신 목표 가동률(${targets.targetOcc}%)이 100%를 초과합니다. 그래도 저장하시겠습니까?`)) {
+          setIsSaving(false);
+          return;
+        }
+      }
+
       await saveTargets({
         year,
         month,
@@ -164,37 +181,51 @@ export default function TargetsPage() {
         <div className="space-y-6 border-t border-gray-800 pt-6">
           <h3 className="text-lg font-medium text-gray-200 mb-4">{year}년 {month}월 목표 설정</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">목표 객실수 (Target R/N)</label>
-              <input 
-                type="number"
-                value={targets.targetRn}
-                onChange={(e) => setTargets({...targets, targetRn: Number(e.target.value)})}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
-              />
-            </div>
+          {(() => {
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const maxPossibleRn = daysInMonth * 180;
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">목표 매출 (Target Rev)</label>
-              <input 
-                type="number"
-                value={targets.targetRev}
-                onChange={(e) => setTargets({...targets, targetRev: Number(e.target.value)})}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">목표 가동률 (Target OCC %)</label>
-              <input 
-                type="number"
-                value={targets.targetOcc}
-                onChange={(e) => setTargets({...targets, targetOcc: Number(e.target.value)})}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-300">목표 객실수 (Target R/N)</label>
+                  <input 
+                    type="number"
+                    value={targets.targetRn}
+                    onChange={(e) => setTargets({...targets, targetRn: Number(e.target.value)})}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
+                  />
+                  <p className={`text-xs mt-1 ${targets.targetRn > maxPossibleRn ? 'text-amber-400 font-semibold animate-pulse' : 'text-gray-500'}`}>
+                    최대 가능 R/N: {maxPossibleRn.toLocaleString()}실 (180실 × {daysInMonth}일)
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-300">목표 매출 (Target Rev)</label>
+                  <input 
+                    type="number"
+                    value={targets.targetRev}
+                    onChange={(e) => setTargets({...targets, targetRev: Number(e.target.value)})}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">₩ 기호 제외 숫자만 입력</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-300">목표 가동률 (Target OCC %)</label>
+                  <input 
+                    type="number"
+                    value={targets.targetOcc}
+                    onChange={(e) => setTargets({...targets, targetOcc: Number(e.target.value)})}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-gray-200 outline-none focus:border-indigo-500"
+                  />
+                  <p className={`text-xs mt-1 ${targets.targetOcc > 100 ? 'text-amber-400 font-semibold animate-pulse' : 'text-gray-500'}`}>
+                    최대 가동률 한도: 100%
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="mt-8 flex justify-end items-center gap-4">

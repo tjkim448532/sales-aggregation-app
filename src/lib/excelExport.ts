@@ -297,10 +297,11 @@ export async function exportDashboardToExcel(
   const diffTime = Math.abs(dEnd.getTime() - dStart.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-  // Re-calculate the rooms sold using periodRoomsSold helper (including 51PY x2 weight)
+  // Re-calculate the rooms sold using periodRoomsSold helper (including 51PY x2 weight and ETC types)
   let sold16 = 0;
   let sold35 = 0;
   let sold51 = 0;
+  let soldEtc = 0;
   if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
     apiResponse.segmentBreakdown.forEach(item => {
       let py = item.pyType || item.room_type || item.facility_name || "";
@@ -308,6 +309,7 @@ export async function exportDashboardToExcel(
       if (py.includes("16")) sold16 += rn;
       else if (py.includes("35")) sold35 += rn;
       else if (py.includes("51")) sold51 += rn;
+      else soldEtc += rn;
     });
   }
 
@@ -327,8 +329,21 @@ export async function exportDashboardToExcel(
   const cap35 = capsForTarget["35PY"] || 90;
   const totalCap = cap16 + cap35;
 
-  const actualRn = sold16 + sold35 + (sold51 * 2);
-  const actualRev = Number(apiResponse.mtd?.actual || 0);
+  const actualRn = sold16 + sold35 + (sold51 * 2) + soldEtc;
+  
+  let actualRev = 0;
+  if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
+    const roomTotalItem = apiResponse.dailyReportBreakdown.find(
+      (x: any) => x.category === "ROOM" && (x.name === "객실 Total" || x.name === "ROOM")
+    );
+    if (roomTotalItem) {
+      actualRev = Number(roomTotalItem.mtd_actual || 0);
+    }
+  }
+  if (actualRev === 0) {
+    actualRev = Number(apiResponse.mtd?.actual || 0);
+  }
+
   const actualOcc = totalCap > 0 ? (actualRn / (totalCap * diffDays)) : 0; // Fractional value for Excel formatting
 
   const targetRows = [
