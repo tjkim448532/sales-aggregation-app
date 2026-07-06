@@ -691,14 +691,14 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
             <div>
-              <span className="font-semibold text-indigo-300 text-xs block mb-2">① 수용량 및 기타 객실</span>
+              <span className="font-semibold text-indigo-300 text-xs block mb-2">① 리조트 객실 수용량</span>
               <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
                 <li>• 총 물리 객실: <span className="text-white font-semibold">180실</span> (16평 90실, 35평 90실)</li>
-                <li>• <span className="text-white font-semibold">기타 객실 분류</span>: 주요 평형(16평, 35평, 51평) 외의 모든 실적은 <span className="text-indigo-400 font-semibold">기타</span> 항목으로 안전하게 자동 집계되어 누락을 방지합니다.</li>
+                <li>• 51평(커넥팅룸)은 16평 1실과 35평 1실을 조합하여 판매하므로 전체 총 물리 객실 수(180실)에는 변동이 없습니다.</li>
               </ul>
             </div>
             <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
-              <strong className="text-indigo-400">실제 예:</strong> 16평 50실, 35평 40실, 기타 5실 판매 시 총 95실로 누수 없이 합계 반영.
+              <strong className="text-indigo-400">실제 예:</strong> 16평 50실, 35평 40실 판매 시 총 90실이 점유된 것으로 집계.
             </div>
           </div>
           
@@ -734,7 +734,7 @@ export default function DashboardPage() {
               <span className="font-semibold text-indigo-300 text-xs block mb-2">④ 전체 가동률 (Total OCC)</span>
               <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
                 <li>• 51평 실적은 수신 시 물리 가중치(x2)가 이미 반영되어 있습니다.</li>
-                <li className="font-mono pt-1 text-white font-semibold">• Total OCC = (16평 + 35평 + 51평 + 기타) / 180실</li>
+                <li className="font-mono pt-1 text-white font-semibold">• Total OCC = (16평 + 35평 + 51평) / 180실</li>
               </ul>
             </div>
             <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
