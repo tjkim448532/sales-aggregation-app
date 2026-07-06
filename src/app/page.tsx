@@ -687,10 +687,14 @@ export default function DashboardPage() {
               <span className="font-semibold text-indigo-300 text-xs block mb-2">① 수용량 및 기타 객실</span>
               <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
                 <li>• 총 물리 객실: <span className="text-white font-semibold">180실</span> (16평 90실, 35평 90실)</li>
-                <li>• <span className="text-white font-semibold">기타 객실 분류</span>: 주요 평형(16평, 35평, 51평) 외의 실적은 <span className="text-indigo-400 font-semibold">기타</span> 항목으로 안전하게 자동 집계되어 총합 누락을 방지합니다.</li>
+                <li>• <span className="text-white font-semibold">기타 객실 분류</span>: 주요 평형(16평, 35평, 51평) 외의 모든 실적은 <span className="text-indigo-400 font-semibold">기타</span> 항목으로 안전하게 자동 집계되어 누락을 방지합니다.</li>
               </ul>
             </div>
+            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
+              <strong className="text-indigo-400">실제 예:</strong> 16평 50실, 35평 40실, 기타 5실 판매 시 총 95실로 누수 없이 합계 반영.
+            </div>
           </div>
+          
           <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
             <div>
               <span className="font-semibold text-amber-300 text-xs block mb-2">② 51평형 (커넥팅룸) 특성</span>
@@ -700,7 +704,11 @@ export default function DashboardPage() {
                 <li>• <span className="text-white font-semibold">ADR(객단가)</span>: 방 2개가 아닌 <span className="text-amber-300 font-semibold">순수 예약 1건</span> 기준으로 산출</li>
               </ul>
             </div>
+            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
+              <strong className="text-amber-400">실제 예:</strong> 51평 1건 매출 30만 원 발생 시 단가는 30만 원으로 단독 표출.
+            </div>
           </div>
+          
           <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
             <div>
               <span className="font-semibold text-emerald-300 text-xs block mb-2">③ 16평/35평 실질 OCC</span>
@@ -709,14 +717,21 @@ export default function DashboardPage() {
                 <li>• 35평 OCC:<br /><span className="text-white font-semibold">&#123;35평 R/N + (51평 R/N &divide; 2)&#125; / 90실</span></li>
               </ul>
             </div>
+            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
+              <strong className="text-emerald-400">실제 예:</strong> 16평 단독 40실 + 51평 10실(물리 20실) 판매 시 16평 OCC는 (40 + 5) / 90 = 50.0%
+            </div>
           </div>
+          
           <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
             <div>
               <span className="font-semibold text-indigo-300 text-xs block mb-2">④ 전체 가동률 (Total OCC)</span>
               <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
-                <li>• 백엔드에서 51평 물리 가중치(x2)가 이미 반영된 실적으로 수신됩니다.</li>
+                <li>• 51평 실적은 수신 시 물리 가중치(x2)가 이미 반영되어 있습니다.</li>
                 <li className="font-mono pt-1 text-white font-semibold">• Total OCC = (16평 + 35평 + 51평 + 기타) / 180실</li>
               </ul>
+            </div>
+            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
+              <strong className="text-indigo-400">실제 예:</strong> 16평 40실, 35평 30실, 51평 10실(물리 20실) 판매 시 전체 OCC는 (40 + 30 + 20) / 180 = 50.0%
             </div>
           </div>
         </div>
