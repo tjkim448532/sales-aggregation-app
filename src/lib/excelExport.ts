@@ -33,8 +33,8 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       else if (py.includes("35")) py = "35PY";
       else if (py.includes("51")) py = "51PY";
       else py = "기타";
-
-      const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0);
+ 
+      const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0);
       const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0);
 
       const cellKey = `${segName}_${py}`;
@@ -318,7 +318,7 @@ export async function exportDashboardToExcel(
   if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
     apiResponse.segmentBreakdown.forEach(item => {
       let py = item.pyType || item.room_type || item.facility_name || "";
-      const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0);
+      const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0);
       if (py.includes("16")) sold16 += rn;
       else if (py.includes("35")) sold35 += rn;
       else if (py.includes("51")) sold51 += rn;
@@ -635,7 +635,7 @@ export async function exportDashboardToExcel(
   if (Array.isArray(apiResponse.rateCodeBreakdown)) {
     apiResponse.rateCodeBreakdown.forEach(item => {
       rcMap[item.rateCode] = {
-        roomsSold: Number(item.roomsSold || 0),
+        roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
         revenue: Number(item.revenue || 0)
       };
     });

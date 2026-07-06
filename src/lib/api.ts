@@ -37,7 +37,8 @@ export interface V3ChannelBreakdownItem {
 export interface V3RateCodeBreakdownItem {
   rateCode: string;
   segment: string;
-  roomsSold: number;
+  roomsSold?: number;
+  rooms_sold_weighted?: number;
   revenue: number;
 }
 
