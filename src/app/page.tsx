@@ -27,6 +27,14 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
   const pyTypes = ["16PY", "35PY", "51PY"]
 
+  // Initialize capacities mapping (16평 + 펫룸 16평 = 70, 35평 + 펫룸 35평 = 106, 51평 = 38)
+  const capacities: { [key: string]: number } = {
+    "16PY": 70,
+    "35PY": 106,
+    "51PY": 38
+  }
+  const totalDailyCapacity = 214 // 70 + 106 + 38
+
   // Initialize rows
   const rows: SegmentMatrixRow[] = metrics.map(metric => ({ metric }))
 
@@ -34,12 +42,10 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
 
   const cellRN: { [key: string]: number } = {}
   const cellREV: { [key: string]: number } = {}
-  const cellOCC: { [key: string]: number } = {}
 
-  // 1. Loop through raw breakdown data
+  // 1. Loop through raw breakdown data to sum up roomsSold and revenue
   if (Array.isArray(segmentBreakdown)) {
     segmentBreakdown.forEach(item => {
-      // Handle both new format (segment, pyType) and old format (segment_name, facility_name)
       const segNameRaw = item.segment || item.segment_name || ""
       const segName = segments.find(s => s === segNameRaw) || "기타"
 
@@ -52,12 +58,10 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
 
       const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0)
       const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0)
-      const occ = Number(item.occ || 0)
 
       const cellKey = `${segName}_${py}`
       cellRN[cellKey] = (cellRN[cellKey] || 0) + rn
       cellREV[cellKey] = (cellREV[cellKey] || 0) + rev
-      cellOCC[cellKey] = occ
     })
   }
 
@@ -65,81 +69,66 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number): SegmentM
   segments.forEach(seg => {
     let segTotalRN = 0
     let segTotalREV = 0
-    let segTotalWeightedOCCSum = 0
-    let segTotalOccCount = 0
 
     pyTypes.forEach(py => {
       const cellKey = `${seg}_${py}`
       const rn = cellRN[cellKey] || 0
       const rev = cellREV[cellKey] || 0
-      const occ = cellOCC[cellKey] || 0
       const adr = rn > 0 ? rev / rn : 0
-      const formattedOcc = (occ / diffDays) * 100
+      
+      const capacity = capacities[py] || 70
+      const occ = (rn / (capacity * diffDays)) * 100
 
       getRow("판매객실수(R/N)")[cellKey] = rn
       getRow("매출액")[cellKey] = rev
       getRow("객단가(ADR)")[cellKey] = adr
-      getRow("가동률(OCC)")[cellKey] = formattedOcc
+      getRow("가동률(OCC)")[cellKey] = occ
 
       segTotalRN += rn
       segTotalREV += rev
-      if (occ > 0) {
-        segTotalWeightedOCCSum += formattedOcc * rn
-        segTotalOccCount += rn
-      }
     })
 
     const subtotalKey = `${seg}_소계`
     getRow("판매객실수(R/N)")[subtotalKey] = segTotalRN
     getRow("매출액")[subtotalKey] = segTotalREV
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
-    getRow("가동률(OCC)")[subtotalKey] = segTotalOccCount > 0 ? segTotalWeightedOCCSum / segTotalOccCount : 0
+    getRow("가동률(OCC)")[subtotalKey] = (segTotalRN / (totalDailyCapacity * diffDays)) * 100
   })
 
   // Calculate overall totals (합계) for each pyType
   let grandTotalRN = 0
   let grandTotalREV = 0
-  let grandTotalWeightedOCCSum = 0
-  let grandTotalOccCount = 0
 
   pyTypes.forEach(py => {
     let pyTotalRN = 0
     let pyTotalREV = 0
-    let pyTotalWeightedOCCSum = 0
-    let pyTotalOccCount = 0
 
     segments.forEach(seg => {
       const cellKey = `${seg}_${py}`
       const rn = cellRN[cellKey] || 0
       const rev = cellREV[cellKey] || 0
-      const occ = cellOCC[cellKey] || 0
-      const formattedOcc = (occ / diffDays) * 100
 
       pyTotalRN += rn
       pyTotalREV += rev
-      if (occ > 0) {
-        pyTotalWeightedOCCSum += formattedOcc * rn
-        pyTotalOccCount += rn
-      }
     })
 
     const totalKey = `합계_${py}`
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
     getRow("매출액")[totalKey] = pyTotalREV
     getRow("객단가(ADR)")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
-    getRow("가동률(OCC)")[totalKey] = pyTotalOccCount > 0 ? pyTotalWeightedOCCSum / pyTotalOccCount : 0
+    
+    const capacity = capacities[py] || 70
+    getRow("가동률(OCC)")[totalKey] = (pyTotalRN / (capacity * diffDays)) * 100
 
     grandTotalRN += pyTotalRN
     grandTotalREV += pyTotalREV
-    grandTotalWeightedOCCSum += pyTotalWeightedOCCSum
-    grandTotalOccCount += pyTotalOccCount
   })
 
   const grandKey = "합계_총계"
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
   getRow("매출액")[grandKey] = grandTotalREV
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("가동률(OCC)")[grandKey] = grandTotalOccCount > 0 ? grandTotalWeightedOCCSum / grandTotalOccCount : 0
+  getRow("가동률(OCC)")[grandKey] = (grandTotalRN / (totalDailyCapacity * diffDays)) * 100
 
   return rows
 }
