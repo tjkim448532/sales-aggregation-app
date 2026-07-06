@@ -11,7 +11,7 @@ interface SegmentMatrixRow {
 function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacities: { [key: string]: number }): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"];
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"];
-  const pyTypes = ["16PY", "35PY", "51PY"];
+  const pyTypes = ["16PY", "35PY", "51PY", "기타"];
 
   const cap16 = capacities["16PY"] || 90;
   const cap35 = capacities["35PY"] || 90;
@@ -32,7 +32,7 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       if (py.includes("16")) py = "16PY";
       else if (py.includes("35")) py = "35PY";
       else if (py.includes("51")) py = "51PY";
-      else py = "16PY";
+      else py = "기타";
 
       const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0);
       const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0);
@@ -46,6 +46,17 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
   segments.forEach(seg => {
     let segTotalRN = 0;
     let segTotalREV = 0;
+
+    Object.keys(cellRN).forEach(key => {
+      if (key.startsWith(`${seg}_`)) {
+        segTotalRN += cellRN[key];
+      }
+    });
+    Object.keys(cellREV).forEach(key => {
+      if (key.startsWith(`${seg}_`)) {
+        segTotalREV += cellREV[key];
+      }
+    });
 
     const rn16 = cellRN[`${seg}_16PY`] || 0;
     const rn35 = cellRN[`${seg}_35PY`] || 0;
@@ -62,17 +73,14 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
         occVal = cap16 > 0 ? (rn16 + rn51) / (cap16 * diffDays) : 0;
       } else if (py === "35PY") {
         occVal = cap35 > 0 ? (rn35 + rn51) / (cap35 * diffDays) : 0;
-      } else if (py === "51PY") {
-        occVal = "-"; // 51평 단독 가동률은 산출 불가(-) 처리
+      } else if (py === "51PY" || py === "기타") {
+        occVal = "-"; // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
 
       getRow("판매객실수(R/N)")[cellKey] = rn;
       getRow("매출액")[cellKey] = rev;
       getRow("객단가(ADR)")[cellKey] = adr;
       getRow("가동률(OCC)")[cellKey] = occVal;
-
-      segTotalRN += rn;
-      segTotalREV += rev;
     });
 
     const subtotalKey = `${seg}_소계`;
@@ -84,10 +92,6 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
 
   let grandTotalRN = 0;
   let grandTotalREV = 0;
-
-  let totalRN16 = 0;
-  let totalRN35 = 0;
-  let totalRN51 = 0;
 
   pyTypes.forEach(py => {
     let pyTotalRN = 0;
@@ -102,10 +106,6 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       pyTotalREV += rev;
     });
 
-    if (py === "16PY") totalRN16 = pyTotalRN;
-    else if (py === "35PY") totalRN35 = pyTotalRN;
-    else if (py === "51PY") totalRN51 = pyTotalRN;
-
     const totalKey = `합계_${py}`;
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN;
     getRow("매출액")[totalKey] = pyTotalREV;
@@ -113,10 +113,12 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
     
     let pyOccVal: any = 0;
     if (py === "16PY") {
+      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
       pyOccVal = cap16 > 0 ? (pyTotalRN + totalRN51) / (cap16 * diffDays) : 0;
     } else if (py === "35PY") {
+      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
       pyOccVal = cap35 > 0 ? (pyTotalRN + totalRN51) / (cap35 * diffDays) : 0;
-    } else if (py === "51PY") {
+    } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-";
     }
     getRow("가동률(OCC)")[totalKey] = pyOccVal;
@@ -124,6 +126,10 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
     grandTotalRN += pyTotalRN;
     grandTotalREV += pyTotalREV;
   });
+
+  const totalRN16 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_16PY`] || 0), 0);
+  const totalRN35 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_35PY`] || 0), 0);
+  const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
 
   const grandKey = "합계_총계";
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN;
@@ -285,16 +291,45 @@ export async function exportDashboardToExcel(
   });
   currRow += 1;
 
-  // Calculate actual MTD values
-  const actualRn = Number(occupiedItem.mtd_actual || 0);
+  // Calculate diffDays for OCC conversion
+  const dStart = new Date(startDate);
+  const dEnd = new Date(endDate);
+  const diffTime = Math.abs(dEnd.getTime() - dStart.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  // Re-calculate the rooms sold using periodRoomsSold helper (including 51PY x2 weight)
+  let sold16 = 0;
+  let sold35 = 0;
+  let sold51 = 0;
+  if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
+    apiResponse.segmentBreakdown.forEach(item => {
+      let py = item.pyType || item.room_type || item.facility_name || "";
+      const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0);
+      if (py.includes("16")) sold16 += rn;
+      else if (py.includes("35")) sold35 += rn;
+      else if (py.includes("51")) sold51 += rn;
+    });
+  }
+
+  // Extract dynamic capacities
+  const capsForTarget: { [key: string]: number } = { "16PY": 90, "35PY": 90, "51PY": 0 };
+  if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
+    apiResponse.roomTypeBreakdown.forEach((item: any) => {
+      const name = item.room_type || item.facility_name || "";
+      const cap = Number(item.capacity || item.total_capacity || 0);
+      if (name.includes("16")) capsForTarget["16PY"] = cap;
+      else if (name.includes("35")) capsForTarget["35PY"] = cap;
+      else if (name.includes("51")) capsForTarget["51PY"] = cap;
+    });
+  }
+
+  const cap16 = capsForTarget["16PY"] || 90;
+  const cap35 = capsForTarget["35PY"] || 90;
+  const totalCap = cap16 + cap35;
+
+  const actualRn = sold16 + sold35 + (sold51 * 2);
   const actualRev = Number(apiResponse.mtd?.actual || 0);
-  
-  // Calculate average OCC
-  const parts = endDate.split("-");
-  const year = parseInt(parts[0]);
-  const month = parseInt(parts[1]);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const actualOcc = daysInMonth > 0 ? (actualRn / (214 * daysInMonth)) : 0; // ratio format in Excel
+  const actualOcc = totalCap > 0 ? (actualRn / (totalCap * diffDays)) : 0; // Fractional value for Excel formatting
 
   const targetRows = [
     {
@@ -383,15 +418,15 @@ export async function exportDashboardToExcel(
 
   const segmentsList = ["합계", "분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"];
   segmentsList.forEach((seg, idx) => {
-    const colIdx = 2 + idx * 4;
-    worksheet.mergeCells(currRow, colIdx, currRow, colIdx + 3);
+    const colIdx = 2 + idx * 5;
+    worksheet.mergeCells(currRow, colIdx, currRow, colIdx + 4);
     const cell = groupHeaderRow.getCell(colIdx);
     cell.value = seg;
     cell.font = fontTableHeader;
     cell.fill = seg === "합계" ? fillIndigoHeader : fillTealHeader;
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
     
-    for (let c = colIdx; c < colIdx + 4; c++) {
+    for (let c = colIdx; c < colIdx + 5; c++) {
       groupHeaderRow.getCell(c).border = borderThin;
     }
   });
@@ -404,15 +439,16 @@ export async function exportDashboardToExcel(
   pyHeaderRow.getCell(1).border = borderThin;
 
   segmentsList.forEach((seg, idx) => {
-    const colIdx = 2 + idx * 4;
+    const colIdx = 2 + idx * 5;
     const isTotal = seg === "합계";
     
     pyHeaderRow.getCell(colIdx).value = "16PY";
     pyHeaderRow.getCell(colIdx + 1).value = "35PY";
     pyHeaderRow.getCell(colIdx + 2).value = "51PY";
-    pyHeaderRow.getCell(colIdx + 3).value = isTotal ? "총계" : "소계";
+    pyHeaderRow.getCell(colIdx + 3).value = "기타";
+    pyHeaderRow.getCell(colIdx + 4).value = isTotal ? "총계" : "소계";
 
-    for (let c = colIdx; c < colIdx + 4; c++) {
+    for (let c = colIdx; c < colIdx + 5; c++) {
       const cell = pyHeaderRow.getCell(c);
       cell.font = fontTableSubHeader;
       cell.fill = fillSubtotal;
@@ -421,12 +457,6 @@ export async function exportDashboardToExcel(
     }
   });
   currRow += 1;
-
-  // Calculate diffDays for OCC conversion
-  const dStart = new Date(startDate);
-  const dEnd = new Date(endDate);
-  const diffTime = Math.abs(dEnd.getTime() - dStart.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
   // Re-calculate the pivoted matrix rows using dynamic capacities
   const caps: { [key: string]: number } = { "16PY": 90, "35PY": 90, "51PY": 0 };
@@ -458,9 +488,8 @@ export async function exportDashboardToExcel(
     lbl.alignment = { vertical: 'middle', horizontal: 'left' };
 
     segmentsList.forEach((seg, sIdx) => {
-      const colIdx = 2 + sIdx * 4;
+      const colIdx = 2 + sIdx * 5;
       const isTotal = seg === "합계";
-      const keySuffix = isTotal ? "" : "_소계";
 
       const getVal = (key: string) => {
         const val = row[key];
@@ -470,30 +499,32 @@ export async function exportDashboardToExcel(
       const val16 = getVal(`${isTotal ? "합계" : seg}_16PY`);
       const val35 = getVal(`${isTotal ? "합계" : seg}_35PY`);
       const val51 = getVal(`${isTotal ? "합계" : seg}_51PY`);
+      const valEtc = getVal(`${isTotal ? "합계" : seg}_기타`);
       const valSum = getVal(`${isTotal ? "합계" : seg}${isTotal ? "_총계" : "_소계"}`);
 
       r.getCell(colIdx).value = val16;
       r.getCell(colIdx + 1).value = val35;
       r.getCell(colIdx + 2).value = val51;
-      r.getCell(colIdx + 3).value = valSum;
+      r.getCell(colIdx + 3).value = valEtc;
+      r.getCell(colIdx + 4).value = valSum;
 
-      for (let c = colIdx; c < colIdx + 4; c++) {
+      for (let c = colIdx; c < colIdx + 5; c++) {
         const cell = r.getCell(c);
-        cell.font = (c === colIdx + 3) ? fontBold : fontRegular;
+        cell.font = (c === colIdx + 4) ? fontBold : fontRegular;
         cell.border = borderThin;
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
         
         // Formatter
-        if (isOcc) {
+        if (isOcc && typeof cell.value === "number") {
           cell.numFmt = '0.0%';
-        } else {
+        } else if (!isOcc && typeof cell.value === "number") {
           cell.numFmt = '#,##0';
         }
 
         // Fills
         if (isTotal) {
           cell.fill = fillTotal;
-        } else if (c === colIdx + 3) {
+        } else if (c === colIdx + 4) {
           cell.fill = fillSubtotal;
         }
       }

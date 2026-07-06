@@ -25,7 +25,7 @@ interface SegmentMatrixRow {
 function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacities: { [key: string]: number }): SegmentMatrixRow[] {
   const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"]
   const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
-  const pyTypes = ["16PY", "35PY", "51PY"]
+  const pyTypes = ["16PY", "35PY", "51PY", "기타"]
 
   const cap16 = capacities["16PY"] || 90
   const cap35 = capacities["35PY"] || 90
@@ -50,7 +50,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       if (py.includes("16")) py = "16PY"
       else if (py.includes("35")) py = "35PY"
       else if (py.includes("51")) py = "51PY"
-      else py = "16PY" // default fallback
+      else py = "기타" // Unmapped types go to 기타 (ETC)
 
       const rn = Number(item.roomsSold || item.room_nights || item.rooms_sold || 0)
       const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0)
@@ -65,6 +65,18 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
   segments.forEach(seg => {
     let segTotalRN = 0
     let segTotalREV = 0
+
+    // Sum over ALL keys in cellRN/cellREV to avoid any leak
+    Object.keys(cellRN).forEach(key => {
+      if (key.startsWith(`${seg}_`)) {
+        segTotalRN += cellRN[key]
+      }
+    })
+    Object.keys(cellREV).forEach(key => {
+      if (key.startsWith(`${seg}_`)) {
+        segTotalREV += cellREV[key]
+      }
+    })
 
     const rn16 = cellRN[`${seg}_16PY`] || 0
     const rn35 = cellRN[`${seg}_35PY`] || 0
@@ -81,17 +93,14 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
         occVal = cap16 > 0 ? ((rn16 + rn51) / (cap16 * diffDays)) * 100 : 0
       } else if (py === "35PY") {
         occVal = cap35 > 0 ? ((rn35 + rn51) / (cap35 * diffDays)) * 100 : 0
-      } else if (py === "51PY") {
-        occVal = "-" // 51평 단독 가동률은 산출 불가(-) 처리
+      } else if (py === "51PY" || py === "기타") {
+        occVal = "-" // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
 
       getRow("판매객실수(R/N)")[cellKey] = rn
       getRow("매출액")[cellKey] = rev
       getRow("객단가(ADR)")[cellKey] = adr
       getRow("가동률(OCC)")[cellKey] = occVal
-
-      segTotalRN += rn
-      segTotalREV += rev
     })
 
     const subtotalKey = `${seg}_소계`
@@ -107,10 +116,6 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
   let grandTotalRN = 0
   let grandTotalREV = 0
 
-  let totalRN16 = 0
-  let totalRN35 = 0
-  let totalRN51 = 0
-
   pyTypes.forEach(py => {
     let pyTotalRN = 0
     let pyTotalREV = 0
@@ -124,10 +129,6 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       pyTotalREV += rev
     })
 
-    if (py === "16PY") totalRN16 = pyTotalRN
-    else if (py === "35PY") totalRN35 = pyTotalRN
-    else if (py === "51PY") totalRN51 = pyTotalRN
-
     const totalKey = `합계_${py}`
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
     getRow("매출액")[totalKey] = pyTotalREV
@@ -135,10 +136,12 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     
     let pyOccVal: any = 0
     if (py === "16PY") {
+      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
       pyOccVal = cap16 > 0 ? ((pyTotalRN + totalRN51) / (cap16 * diffDays)) * 100 : 0
     } else if (py === "35PY") {
+      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
       pyOccVal = cap35 > 0 ? ((pyTotalRN + totalRN51) / (cap35 * diffDays)) * 100 : 0
-    } else if (py === "51PY") {
+    } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-"
     }
     getRow("가동률(OCC)")[totalKey] = pyOccVal
@@ -146,6 +149,10 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     grandTotalRN += pyTotalRN
     grandTotalREV += pyTotalREV
   })
+
+  const totalRN16 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_16PY`] || 0), 0)
+  const totalRN35 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_35PY`] || 0), 0)
+  const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
 
   const grandKey = "합계_총계"
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
@@ -312,7 +319,7 @@ export default function DashboardPage() {
   // Segment PY Matrix Column Definitions
   const matrixColDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
-    const pyTypes = ["16PY", "35PY", "51PY"]
+    const pyTypes = ["16PY", "35PY", "51PY", "기타"]
 
     const cols: (ColDef | ColGroupDef)[] = [
       { 
@@ -349,6 +356,12 @@ export default function DashboardPage() {
           valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
         },
         { 
+          field: "합계_기타", 
+          headerName: "기타", 
+          width: 110,
+          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+        },
+        { 
           field: "합계_총계", 
           headerName: "총계", 
           width: 130,
@@ -378,6 +391,12 @@ export default function DashboardPage() {
           { 
             field: `${seg}_51PY`, 
             headerName: "51PY", 
+            width: 110,
+            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
+          },
+          { 
+            field: `${seg}_기타`, 
+            headerName: "기타", 
             width: 110,
             valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
           },
