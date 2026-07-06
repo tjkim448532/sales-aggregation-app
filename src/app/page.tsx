@@ -439,7 +439,14 @@ export default function DashboardPage() {
   // Channel Detail Column Definitions
 
   const channelColDefs = useMemo<ColDef<V3ChannelBreakdownItem>[]>(() => [
-    { field: "channel_name", headerName: "채널명", filter: true, sortable: true, width: 220, cellStyle: { textAlign: 'left' } },
+    { 
+      headerName: "채널명", 
+      filter: true, 
+      sortable: true, 
+      width: 220, 
+      cellStyle: { textAlign: 'left' },
+      valueGetter: (p) => p.data?.channel_name || p.data?.facility_name || "" 
+    },
     { 
       field: "today_actual", 
       headerName: "금일 실적", 
@@ -497,7 +504,7 @@ export default function DashboardPage() {
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.channelBreakdown) return []
     return apiResponse.channelBreakdown.map(item => ({
-      name: item.channel_name,
+      name: item.channel_name || item.facility_name || "",
       revenue: Math.round(Number(item.today_actual || 0) / 1000)
     }))
   }, [apiResponse])
