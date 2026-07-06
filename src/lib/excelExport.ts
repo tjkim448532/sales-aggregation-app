@@ -76,9 +76,9 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       let occVal: any = 0;
       if (py === "16PY") {
         // 51평 roomsSold는 이미 2배이므로 반(÷2)으로 나누어 더해줌
-        occVal = cap16 > 0 ? (rn16 + (rn51 / 2)) / (cap16 * diffDays) : 0;
+        occVal = cap16 > 0 ? (rn16 + (rn51 / 2)) / cap16 : 0;
       } else if (py === "35PY") {
-        occVal = cap35 > 0 ? (rn35 + (rn51 / 2)) / (cap35 * diffDays) : 0;
+        occVal = cap35 > 0 ? (rn35 + (rn51 / 2)) / cap35 : 0;
       } else if (py === "51PY" || py === "기타") {
         occVal = "-"; // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
@@ -95,7 +95,7 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0;
     
     // Subtotal OCC: rn51은 이미 x2 배 부풀려져 있으므로 곱하지 않고 그대로 더함
-    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? (rn16 + rn35 + rn51) / (totalCapacity * diffDays) : 0;
+    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? (rn16 + rn35 + rn51) / totalCapacity : 0;
   });
 
   let grandTotalRN = 0;
@@ -127,10 +127,10 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
     let pyOccVal: any = 0;
     if (py === "16PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
-      pyOccVal = cap16 > 0 ? (pyTotalRN + (totalRN51 / 2)) / (cap16 * diffDays) : 0;
+      pyOccVal = cap16 > 0 ? (pyTotalRN + (totalRN51 / 2)) / cap16 : 0;
     } else if (py === "35PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
-      pyOccVal = cap35 > 0 ? (pyTotalRN + (totalRN51 / 2)) / (cap35 * diffDays) : 0;
+      pyOccVal = cap35 > 0 ? (pyTotalRN + (totalRN51 / 2)) / cap35 : 0;
     } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-";
     }
@@ -148,7 +148,7 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN;
   getRow("매출액")[grandKey] = grandTotalREV;
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0;
-  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? (totalRN16 + totalRN35 + totalRN51) / (totalCapacity * diffDays) : 0;
+  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? (totalRN16 + totalRN35 + totalRN51) / totalCapacity : 0;
 
   return rows;
 }
@@ -327,7 +327,7 @@ export async function exportDashboardToExcel(
   }
 
   // Extract dynamic capacities
-  const capsForTarget: { [key: string]: number } = { "16PY": 90, "35PY": 90, "51PY": 0 };
+  const capsForTarget: { [key: string]: number } = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 };
   if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
     apiResponse.roomTypeBreakdown.forEach((item: any) => {
       const name = item.room_type || item.facility_name || "";
@@ -338,8 +338,8 @@ export async function exportDashboardToExcel(
     });
   }
 
-  const cap16 = capsForTarget["16PY"] || 90;
-  const cap35 = capsForTarget["35PY"] || 90;
+  const cap16 = capsForTarget["16PY"] || 90 * diffDays;
+  const cap35 = capsForTarget["35PY"] || 90 * diffDays;
   const totalCap = cap16 + cap35;
 
   const actualRn = sold16 + sold35 + (sold51 * 2) + soldEtc;
@@ -357,7 +357,7 @@ export async function exportDashboardToExcel(
     actualRev = Number(apiResponse.mtd?.actual || 0);
   }
 
-  const actualOcc = totalCap > 0 ? (actualRn / (totalCap * diffDays)) : 0; // Fractional value for Excel formatting
+  const actualOcc = totalCap > 0 ? (actualRn / totalCap) : 0; // Fractional value for Excel formatting
 
   const targetRows = [
     {
@@ -487,7 +487,7 @@ export async function exportDashboardToExcel(
   currRow += 1;
 
   // Re-calculate the pivoted matrix rows using dynamic capacities
-  const caps: { [key: string]: number } = { "16PY": 90, "35PY": 90, "51PY": 0 };
+  const caps: { [key: string]: number } = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 };
   if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
     apiResponse.roomTypeBreakdown.forEach((item: any) => {
       const name = item.room_type || item.facility_name || "";

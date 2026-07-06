@@ -96,9 +96,9 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       let occVal: any = 0
       if (py === "16PY") {
         // 51평 roomsSold는 이미 2배이므로 반(÷2)으로 나누어 더해줌
-        occVal = cap16 > 0 ? ((rn16 + (rn51 / 2)) / (cap16 * diffDays)) * 100 : 0
+        occVal = cap16 > 0 ? ((rn16 + (rn51 / 2)) / cap16) * 100 : 0
       } else if (py === "35PY") {
-        occVal = cap35 > 0 ? ((rn35 + (rn51 / 2)) / (cap35 * diffDays)) * 100 : 0
+        occVal = cap35 > 0 ? ((rn35 + (rn51 / 2)) / cap35) * 100 : 0
       } else if (py === "51PY" || py === "기타") {
         occVal = "-" // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
@@ -115,7 +115,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
     
     // Subtotal OCC: rn51은 이미 x2 배 부풀려져 있으므로 곱하지 않고 그대로 더함
-    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + rn51) / (totalCapacity * diffDays)) * 100 : 0
+    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + rn51) / totalCapacity) * 100 : 0
   })
 
   // Calculate overall totals (합계) for each pyType
@@ -148,10 +148,10 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     let pyOccVal: any = 0
     if (py === "16PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap16 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / (cap16 * diffDays)) * 100 : 0
+      pyOccVal = cap16 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / cap16) * 100 : 0
     } else if (py === "35PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap35 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / (cap35 * diffDays)) * 100 : 0
+      pyOccVal = cap35 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / cap35) * 100 : 0
     } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-"
     }
@@ -169,7 +169,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
   getRow("매출액")[grandKey] = grandTotalREV
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + totalRN51) / (totalCapacity * diffDays)) * 100 : 0
+  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + totalRN51) / totalCapacity) * 100 : 0
 
   return rows;
 }
@@ -228,7 +228,7 @@ export default function DashboardPage() {
   }, [startDate, endDate])
 
   const dynamicCapacities = useMemo(() => {
-    const caps = { "16PY": 90, "35PY": 90, "51PY": 0 }
+    const caps = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 }
     if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
       apiResponse.roomTypeBreakdown.forEach((item: any) => {
         const name = item.room_type || item.facility_name || ""
@@ -243,7 +243,7 @@ export default function DashboardPage() {
       })
     }
     return caps
-  }, [apiResponse])
+  }, [apiResponse, diffDays])
 
   const periodRoomsSold = useMemo(() => {
     let sold16 = 0
@@ -285,12 +285,12 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const actualOcc = useMemo(() => {
-    const cap16 = dynamicCapacities["16PY"] || 90
-    const cap35 = dynamicCapacities["35PY"] || 90
+    const cap16 = dynamicCapacities["16PY"] || 90 * diffDays
+    const cap35 = dynamicCapacities["35PY"] || 90 * diffDays
     const totalCap = cap16 + cap35
 
     if (totalCap === 0) return 0
-    return (actualRn / (totalCap * diffDays)) * 100
+    return (actualRn / totalCap) * 100
   }, [actualRn, dynamicCapacities, diffDays])
 
   const exportToExcel = async () => {
