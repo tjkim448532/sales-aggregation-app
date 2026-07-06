@@ -86,13 +86,19 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       const cellKey = `${seg}_${py}`
       const rn = cellRN[cellKey] || 0
       const rev = cellREV[cellKey] || 0
-      const adr = rn > 0 ? rev / rn : 0
+      
+      let adr = rn > 0 ? rev / rn : 0
+      if (py === "51PY") {
+        // 백엔드가 51평 예약건수(roomsSold)를 이미 2배로 주므로, ADR 산출 시 건수(rn/2) 기준 분모 사용
+        adr = rn > 0 ? rev / (rn / 2) : 0
+      }
       
       let occVal: any = 0
       if (py === "16PY") {
-        occVal = cap16 > 0 ? ((rn16 + rn51) / (cap16 * diffDays)) * 100 : 0
+        // 51평 roomsSold는 이미 2배이므로 반(÷2)으로 나누어 더해줌
+        occVal = cap16 > 0 ? ((rn16 + (rn51 / 2)) / (cap16 * diffDays)) * 100 : 0
       } else if (py === "35PY") {
-        occVal = cap35 > 0 ? ((rn35 + rn51) / (cap35 * diffDays)) * 100 : 0
+        occVal = cap35 > 0 ? ((rn35 + (rn51 / 2)) / (cap35 * diffDays)) * 100 : 0
       } else if (py === "51PY" || py === "기타") {
         occVal = "-" // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
@@ -108,8 +114,8 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     getRow("매출액")[subtotalKey] = segTotalREV
     getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
     
-    // Subtotal OCC: { 16PY + 35PY + (51PY * 2) } / (totalCapacity * diffDays) * 100
-    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + (rn51 * 2)) / (totalCapacity * diffDays)) * 100 : 0
+    // Subtotal OCC: rn51은 이미 x2 배 부풀려져 있으므로 곱하지 않고 그대로 더함
+    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + rn51) / (totalCapacity * diffDays)) * 100 : 0
   })
 
   // Calculate overall totals (합계) for each pyType
@@ -132,15 +138,20 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     const totalKey = `합계_${py}`
     getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
     getRow("매출액")[totalKey] = pyTotalREV
-    getRow("객단가(ADR)")[totalKey] = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
+    
+    let pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
+    if (py === "51PY") {
+      pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / (pyTotalRN / 2) : 0
+    }
+    getRow("객단가(ADR)")[totalKey] = pyTotalAdr
     
     let pyOccVal: any = 0
     if (py === "16PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap16 > 0 ? ((pyTotalRN + totalRN51) / (cap16 * diffDays)) * 100 : 0
+      pyOccVal = cap16 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / (cap16 * diffDays)) * 100 : 0
     } else if (py === "35PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap35 > 0 ? ((pyTotalRN + totalRN51) / (cap35 * diffDays)) * 100 : 0
+      pyOccVal = cap35 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / (cap35 * diffDays)) * 100 : 0
     } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-"
     }
@@ -158,7 +169,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
   getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
   getRow("매출액")[grandKey] = grandTotalREV
   getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + (totalRN51 * 2)) / (totalCapacity * diffDays)) * 100 : 0
+  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + totalRN51) / (totalCapacity * diffDays)) * 100 : 0
 
   return rows;
 }
@@ -256,8 +267,8 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const actualRn = useMemo(() => {
-    // 51평 예약건은 물리적 객실 2개를 소모하므로 가중치(*2)를 더하고, 기타 객실의 실적도 추가합니다.
-    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + (periodRoomsSold.sold51 * 2) + periodRoomsSold.soldEtc
+    // 백엔드가 이미 51평에 x2 가중치를 적용해서 roomsSold를 내려주므로, 추가 가중치 없이 단순히 합산합니다.
+    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + periodRoomsSold.sold51 + periodRoomsSold.soldEtc
   }, [periodRoomsSold])
 
   const actualRev = useMemo(() => {
@@ -689,15 +700,15 @@ export default function DashboardPage() {
           <span className="font-semibold text-emerald-300 block mb-1">③ 16평/35평 실질 OCC</span>
           <p className="text-gray-400 leading-relaxed">
             - 51평 투숙 시 점유되는 각 평형 객실 포함<br />
-            - 16평 OCC = <span className="text-white font-semibold">(16평 R/N + 51평 R/N) / 90실</span><br />
-            - 35평 OCC = <span className="text-white font-semibold">(35평 R/N + 51평 R/N) / 90실</span>
+            - 16평 OCC = <span className="text-white font-semibold">&#123;16평 R/N + (51평 R/N &divide; 2)&#125; / 90실</span><br />
+            - 35평 OCC = <span className="text-white font-semibold">&#123;35평 R/N + (51평 R/N &divide; 2)&#125; / 90실</span>
           </p>
         </div>
         <div>
           <span className="font-semibold text-indigo-300 block mb-1">④ 전체 가동률 (Total OCC)</span>
           <p className="text-gray-400 leading-relaxed">
-            - 51평 1건당 물리 객실 2개 환산 (<span className="text-indigo-300 font-semibold">가중치 &times;2</span>)<br />
-            - Total OCC = <span className="text-white font-semibold">&#123;16평 + 35평 + (51평 &times; 2)&#125; / 180실</span>
+            - 백엔드 API에서 51평 실적을 물리 가중치(x2)가 이미 반영된 상태로 수신합니다.<br />
+            - Total OCC = <span className="text-white font-semibold">(16평 + 35평 + 51평 + 기타) / 180실</span>
           </p>
         </div>
       </div>
