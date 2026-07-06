@@ -654,31 +654,30 @@ export default function DashboardPage() {
       )}
 
       {/* 객실 및 가동률 집계 기준 안내 가이드 */}
-      <div className="bg-indigo-950/20 border border-indigo-900/40 p-4 rounded-xl backdrop-blur-sm grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+      <div className="bg-indigo-950/25 border border-indigo-900/50 p-4 rounded-xl backdrop-blur-sm grid grid-cols-1 md:grid-cols-4 gap-4 text-xs shadow-md">
         <div className="md:col-span-4 flex items-center gap-2 border-b border-indigo-900/30 pb-2 mb-1">
           <Info size={14} className="text-indigo-400" />
           <span className="font-bold text-gray-200">벨포레 리조트 객실 및 가동률(OCC) 집계 기준</span>
         </div>
         <div>
-          <span className="font-semibold text-indigo-300 block mb-1">① 수용량 (Capacity)</span>
+          <span className="font-semibold text-indigo-300 block mb-1">① 수용량 및 기타 객실</span>
           <p className="text-gray-400 leading-relaxed">
-            - 총 물리적 객실: <span className="text-white font-semibold">180실</span><br />
-            - 16평형: <span className="text-white font-semibold">90실</span> (일반+펫)<br />
-            - 35평형: <span className="text-white font-semibold">90실</span> (일반+펫)
+            - 총 물리 객실: <span className="text-white font-semibold">180실</span> (16평 90실, 35평 90실)<br />
+            - <span className="text-white font-semibold">미매핑 객실</span>: 72평, 카라반 등은 <span className="text-indigo-300 font-semibold">기타</span> 열로 자동 흡수되어 합계 누락을 방지합니다.
           </p>
         </div>
         <div>
           <span className="font-semibold text-amber-300 block mb-1">② 51평형 (커넥팅룸) 특성</span>
           <p className="text-gray-400 leading-relaxed">
-            - 물리적으로 <span className="text-white font-semibold">16평 1개 + 35평 1개</span> 결합<br />
-            - 재무/매출은 51평 단독 집계<br />
-            - 51평 단독 가동률은 산출 불가(<span className="text-white font-semibold">-</span>)
+            - 물리적으로 <span className="text-white font-semibold">16평 1실 + 35평 1실</span> 결합<br />
+            - 가동률: 단독 산출 불가 (<span className="text-white font-semibold">-</span> 처리)<br />
+            - <span className="text-white font-semibold">ADR(객단가)</span>: 방 2개가 아닌 <span className="text-amber-300 font-semibold">순수 예약 1건</span> 기준으로 산출합니다.
           </p>
         </div>
         <div>
-          <span className="font-semibold text-emerald-300 block mb-1">③ 16평/35평 실질 가동률</span>
+          <span className="font-semibold text-emerald-300 block mb-1">③ 16평/35평 실질 OCC</span>
           <p className="text-gray-400 leading-relaxed">
-            - 51평 투숙 시 점유되는 각 객실 포함<br />
+            - 51평 투숙 시 점유되는 각 평형 객실 포함<br />
             - 16평 OCC = <span className="text-white font-semibold">(16평 R/N + 51평 R/N) / 90실</span><br />
             - 35평 OCC = <span className="text-white font-semibold">(35평 R/N + 51평 R/N) / 90실</span>
           </p>
@@ -686,7 +685,7 @@ export default function DashboardPage() {
         <div>
           <span className="font-semibold text-indigo-300 block mb-1">④ 전체 가동률 (Total OCC)</span>
           <p className="text-gray-400 leading-relaxed">
-            - 51평 1건당 물리적 객실 2개 환산<br />
+            - 51평 1건당 물리 객실 2개 환산 (<span className="text-indigo-300 font-semibold">가중치 &times;2</span>)<br />
             - Total OCC = <span className="text-white font-semibold">&#123;16평 + 35평 + (51평 &times; 2)&#125; / 180실</span>
           </p>
         </div>
