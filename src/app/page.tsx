@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format, subDays } from "date-fns"
-import { Download, Search, RefreshCw, AlertCircle, Target } from "lucide-react"
+import { Download, Search, RefreshCw, AlertCircle, Target, Info } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
@@ -633,6 +633,45 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* 객실 및 가동률 집계 기준 안내 가이드 */}
+      <div className="bg-indigo-950/20 border border-indigo-900/40 p-4 rounded-xl backdrop-blur-sm grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+        <div className="md:col-span-4 flex items-center gap-2 border-b border-indigo-900/30 pb-2 mb-1">
+          <Info size={14} className="text-indigo-400" />
+          <span className="font-bold text-gray-200">벨포레 리조트 객실 및 가동률(OCC) 집계 기준</span>
+        </div>
+        <div>
+          <span className="font-semibold text-indigo-300 block mb-1">① 수용량 (Capacity)</span>
+          <p className="text-gray-400 leading-relaxed">
+            - 총 물리적 객실: <span className="text-white font-semibold">180실</span><br />
+            - 16평형: <span className="text-white font-semibold">90실</span> (일반+펫)<br />
+            - 35평형: <span className="text-white font-semibold">90실</span> (일반+펫)
+          </p>
+        </div>
+        <div>
+          <span className="font-semibold text-amber-300 block mb-1">② 51평형 (커넥팅룸) 특성</span>
+          <p className="text-gray-400 leading-relaxed">
+            - 물리적으로 <span className="text-white font-semibold">16평 1개 + 35평 1개</span> 결합<br />
+            - 재무/매출은 51평 단독 집계<br />
+            - 51평 단독 가동률은 산출 불가(<span className="text-white font-semibold">-</span>)
+          </p>
+        </div>
+        <div>
+          <span className="font-semibold text-emerald-300 block mb-1">③ 16평/35평 실질 가동률</span>
+          <p className="text-gray-400 leading-relaxed">
+            - 51평 투숙 시 점유되는 각 객실 포함<br />
+            - 16평 OCC = <span className="text-white font-semibold">(16평 R/N + 51평 R/N) / 90실</span><br />
+            - 35평 OCC = <span className="text-white font-semibold">(35평 R/N + 51평 R/N) / 90실</span>
+          </p>
+        </div>
+        <div>
+          <span className="font-semibold text-indigo-300 block mb-1">④ 전체 가동률 (Total OCC)</span>
+          <p className="text-gray-400 leading-relaxed">
+            - 51평 1건당 물리적 객실 2개 환산<br />
+            - Total OCC = <span className="text-white font-semibold">&#123;16평 + 35평 + (51평 &times; 2)&#125; / 180실</span>
+          </p>
+        </div>
+      </div>
 
       {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
       <div className="space-y-3">
