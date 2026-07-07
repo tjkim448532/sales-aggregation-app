@@ -72,8 +72,8 @@ const getApiBase = () => {
 export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
   const apiBase = getApiBase();
 
-  // 백엔드 토큰 검증 우회용 mock_super_admin_token 헤더 추가
-  const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
+  // 백엔드 토큰 검증 우회용 mock_super_admin_token 헤더 추가 및 Vercel Edge 캐시 완전 우회를 위한 _t 파라미터 추가
+  const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
     cache: "no-store",
     headers: {
       "Authorization": "Bearer mock_super_admin_token"
