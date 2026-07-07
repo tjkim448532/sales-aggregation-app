@@ -28,14 +28,14 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       const segNameRaw = item.segment || item.segment_name || "";
       const segName = segments.find(s => s === segNameRaw) || "기타";
 
-      let py = item.pyType || item.room_type || item.facility_name || "";
+      let py = item.pyType || item.room_type || item.shop_name || item.facility_name || "";
       if (py.includes("16")) py = "16PY";
       else if (py.includes("35")) py = "35PY";
       else if (py.includes("51")) py = "51PY";
       else py = "기타";
  
       const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0);
-      const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0);
+      const rev = Number(item.today_actual || item.revenue || 0);
 
       const cellKey = `${segName}_${py}`;
       cellRN[cellKey] = (cellRN[cellKey] || 0) + rn;
@@ -233,7 +233,7 @@ export async function exportDashboardToExcel(
   });
   currRow += 1;
 
-  const occupiedItem: any = apiResponse.dailyReportBreakdown?.find(x => x.name === "Occupied Rooms") || {};
+  const occupiedItem: any = apiResponse.dailyReportBreakdown?.find(x => x.shop_name === "Occupied Rooms") || {};
   const kpiRows = [
     {
       metric: "매출액 (Net / 원)",
@@ -317,7 +317,7 @@ export async function exportDashboardToExcel(
   let soldEtc = 0;
   if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
     apiResponse.segmentBreakdown.forEach(item => {
-      let py = item.pyType || item.room_type || item.facility_name || "";
+      let py = item.pyType || item.room_type || item.shop_name || item.facility_name || "";
       const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0);
       if (py.includes("16")) sold16 += rn;
       else if (py.includes("35")) sold35 += rn;
@@ -330,7 +330,7 @@ export async function exportDashboardToExcel(
   const capsForTarget: { [key: string]: number } = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 };
   if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
     apiResponse.roomTypeBreakdown.forEach((item: any) => {
-      const name = item.room_type || item.facility_name || "";
+      const name = item.room_type || item.shop_name || item.facility_name || "";
       const cap = Number(item.capacity || item.total_capacity || 0);
       if (name.includes("16")) capsForTarget["16PY"] = cap;
       else if (name.includes("35")) capsForTarget["35PY"] = cap;
@@ -347,7 +347,7 @@ export async function exportDashboardToExcel(
   let actualRev = 0;
   if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
     const roomTotalItem = apiResponse.dailyReportBreakdown.find(
-      (x: any) => x.category === "ROOM" && (x.name === "객실 Total" || x.name === "ROOM")
+      (x: any) => x.category_code === "ROOM" && (x.shop_name === "객실 Total" || x.shop_name === "ROOM")
     );
     if (roomTotalItem) {
       actualRev = Number(roomTotalItem.mtd_actual || 0);
@@ -490,7 +490,7 @@ export async function exportDashboardToExcel(
   const caps: { [key: string]: number } = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 };
   if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
     apiResponse.roomTypeBreakdown.forEach((item: any) => {
-      const name = item.room_type || item.facility_name || "";
+      const name = item.room_type || item.shop_name || item.facility_name || "";
       const cap = Number(item.capacity || item.total_capacity || 0);
       if (name.includes("16")) {
         caps["16PY"] = cap;
@@ -585,7 +585,7 @@ export async function exportDashboardToExcel(
   channelsData.forEach(ch => {
     const r = worksheet.getRow(currRow);
     r.values = [
-      ch.channel_name,
+      ch.shop_name || ch.facility_name,
       Number(ch.today_actual || 0),
       Number(ch.today_ly || 0),
       Number(ch.mtd_actual || 0),
@@ -634,9 +634,10 @@ export async function exportDashboardToExcel(
   const rcMap: { [key: string]: { roomsSold: number; revenue: number } } = {};
   if (Array.isArray(apiResponse.rateCodeBreakdown)) {
     apiResponse.rateCodeBreakdown.forEach(item => {
-      rcMap[item.rateCode] = {
+      const code = item.rateCode || "UNKNOWN";
+      rcMap[code] = {
         roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
-        revenue: Number(item.revenue || 0)
+        revenue: Number(item.today_actual || item.revenue || 0)
       };
     });
   }

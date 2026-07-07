@@ -15,7 +15,9 @@ export interface V3ChartDataItem {
 export interface V3ReportBreakdownItem {
   category_code: string;
   category_name: string;
-  shop_name: string;
+  shop_name?: string;
+  facility_name?: string;
+  revenue?: number;
   today_actual: number;
   today_ly: number;
   mtd_actual: number;
@@ -54,6 +56,7 @@ export interface V3RevenueResponse {
   ytd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
   
   today_actual?: number;
+  revenue?: number;
   today_ly?: number;
   mtd_actual?: number;
   mtd_ly?: number;

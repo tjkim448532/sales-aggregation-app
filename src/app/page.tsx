@@ -46,14 +46,14 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       const segName = segments.find(s => s === segNameRaw) || "기타"
 
       // Normalize pyType
-      let py = item.pyType || item.room_type || item.shop_name || ""
+      let py = item.pyType || item.room_type || item.shop_name || item.facility_name || ""
       if (py.includes("16")) py = "16PY"
       else if (py.includes("35")) py = "35PY"
       else if (py.includes("51")) py = "51PY"
       else py = "기타" // Unmapped types go to 기타 (ETC)
  
       const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
-      const rev = Number(item.today_actual || 0)
+      const rev = Number(item.today_actual || item.revenue || 0)
 
       const cellKey = `${segName}_${py}`
       cellRN[cellKey] = (cellRN[cellKey] || 0) + rn
@@ -231,7 +231,7 @@ export default function DashboardPage() {
     const caps = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 }
     if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
       apiResponse.roomTypeBreakdown.forEach((item: any) => {
-        const name = item.room_type || item.shop_name || ""
+        const name = item.room_type || item.shop_name || item.facility_name || ""
         const cap = Number(item.capacity || item.total_capacity || 0)
         if (name.includes("16")) {
           caps["16PY"] = cap
@@ -253,7 +253,7 @@ export default function DashboardPage() {
 
     if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
       apiResponse.segmentBreakdown.forEach(item => {
-        let py = item.pyType || item.room_type || item.shop_name || ""
+        let py = item.pyType || item.room_type || item.shop_name || item.facility_name || ""
         const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
         
         if (py.includes("16")) sold16 += rn
@@ -445,7 +445,7 @@ export default function DashboardPage() {
       sortable: true, 
       width: 220, 
       cellStyle: { textAlign: 'left' },
-      valueGetter: (p) => p.data?.shop_name || "" 
+      valueGetter: (p) => p.data?.shop_name || p.data?.facility_name || "" 
     },
     { 
       field: "today_actual", 
@@ -493,7 +493,53 @@ export default function DashboardPage() {
       filter: "agNumberColumnFilter", 
       sortable: true, 
       width: 180, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}` 
+    }
+  ], [])
+
+  const ticketColDefs = useMemo<ColDef<any>[]>(() => [
+    { 
+      headerName: "티켓/레저 영업장", 
+      filter: true, 
+      sortable: true, 
+      width: 220, 
+      cellStyle: { textAlign: 'left' },
+      valueGetter: (p) => p.data?.shop_name || p.data?.facility_name || "" 
+    },
+    { 
+      headerName: "당일 매출 (Net)", 
+      field: "today_actual", 
+      sortable: true, 
+      valueFormatter: (p) => `${Number(p.value || p.data?.revenue || 0).toLocaleString()}원`,
+      cellStyle: { textAlign: 'right', color: '#10B981', fontWeight: 600 } as any
+    },
+    { 
+      headerName: "당일 수량 (Qty)", 
+      field: "qty", 
+      sortable: true, 
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}`,
+      cellStyle: { textAlign: 'right', color: '#818CF8' } as any
+    },
+    { 
+      headerName: "방문객 수 (Visitors)", 
+      field: "visitors", 
+      sortable: true, 
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}`,
+      cellStyle: { textAlign: 'right', color: '#FBBF24' } as any
+    },
+    { 
+      headerName: "MTD 누계", 
+      field: "mtd_actual", 
+      sortable: true, 
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`,
+      cellStyle: { textAlign: 'right' }
+    },
+    { 
+      headerName: "YTD 누계", 
+      field: "ytd_actual", 
+      sortable: true, 
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`,
+      cellStyle: { textAlign: 'right' }
     }
   ], [])
 
@@ -517,7 +563,7 @@ export default function DashboardPage() {
         const code = item.rateCode || "UNKNOWN"
         map[code] = {
           roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
-          revenue: Number(item.today_actual || 0)
+          revenue: Number(item.today_actual || item.revenue || 0)
         }
       })
     }
@@ -775,6 +821,28 @@ export default function DashboardPage() {
           <AgGridReact
             rowData={apiResponse?.channelBreakdown || []}
             columnDefs={channelColDefs}
+            defaultColDef={{ 
+              resizable: true, 
+              wrapHeaderText: true, 
+              autoHeaderHeight: true, 
+              cellStyle: { textAlign: 'center' } 
+            }}
+            animateRows={true}
+            rowHeight={40}
+            headerHeight={42}
+            getRowStyle={() => undefined}
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+
+      {/* 2-2. 티켓/레저 영업장별 실적 (신규) */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-bold text-gray-200">2-2. 티켓/레저 영업장별 실적 (방문객 및 매출)</h2>
+        <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            rowData={(apiResponse as any)?.ticketFacilityBreakdown || []}
+            columnDefs={ticketColDefs}
             defaultColDef={{ 
               resizable: true, 
               wrapHeaderText: true, 
