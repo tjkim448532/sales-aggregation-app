@@ -502,10 +502,11 @@ export default function DashboardPage() {
   }, [apiResponse, diffDays, dynamicCapacities])
 
   const chartData = useMemo(() => {
-    if (!apiResponse || !apiResponse.channelBreakdown) return []
-    return apiResponse.channelBreakdown.map(item => ({
-      name: item.shop_name || "",
-      revenue: Math.round(Number(item.today_actual || 0) / 1000)
+    if (!apiResponse || !apiResponse.chartData) return []
+    // 백엔드가 제공하는 chartData를 그대로 사용하되, 단위만 천원으로 조정 (선택 사항)
+    return apiResponse.chartData.map(item => ({
+      name: item.name || "",
+      value: Math.round(Number(item.value || 0) / 1000)
     }))
   }, [apiResponse])
 
@@ -847,7 +848,7 @@ export default function DashboardPage() {
                 contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#F3F4F6' }}
                 formatter={(value: any) => [`${Number(value).toLocaleString()} 천원`, '매출']}
               />
-              <Bar dataKey="revenue" fill="#4F46E5" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="value" fill="#4F46E5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
