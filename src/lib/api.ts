@@ -65,17 +65,12 @@ export interface Targets {
 }
 
 const getApiBase = () => {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) return "";
-  return base.replace(/\/+$/, "");
+  // Use Next.js proxy to bypass CORS
+  return "";
 };
 
 export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
   const apiBase = getApiBase();
-  if (!apiBase) {
-    console.warn("NEXT_PUBLIC_API_BASE_URL is not set.");
-    return null;
-  }
 
   // 백엔드 토큰 검증 우회용 mock_super_admin_token 헤더 추가
   const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}`, {
