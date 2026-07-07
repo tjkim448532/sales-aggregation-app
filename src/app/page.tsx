@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ChannelBreakdownItem, type V3RateCodeBreakdownItem, fetchTargets } from "@/lib/api"
+import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, fetchTargets } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
@@ -46,14 +46,14 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       const segName = segments.find(s => s === segNameRaw) || "기타"
 
       // Normalize pyType
-      let py = item.pyType || item.room_type || item.facility_name || ""
+      let py = item.pyType || item.room_type || item.shop_name || ""
       if (py.includes("16")) py = "16PY"
       else if (py.includes("35")) py = "35PY"
       else if (py.includes("51")) py = "51PY"
       else py = "기타" // Unmapped types go to 기타 (ETC)
  
       const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
-      const rev = Number(item.revenue || item.today_actual || item.mtd_actual || 0)
+      const rev = Number(item.today_actual || 0)
 
       const cellKey = `${segName}_${py}`
       cellRN[cellKey] = (cellRN[cellKey] || 0) + rn
@@ -231,7 +231,7 @@ export default function DashboardPage() {
     const caps = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 }
     if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
       apiResponse.roomTypeBreakdown.forEach((item: any) => {
-        const name = item.room_type || item.facility_name || ""
+        const name = item.room_type || item.shop_name || ""
         const cap = Number(item.capacity || item.total_capacity || 0)
         if (name.includes("16")) {
           caps["16PY"] = cap
@@ -253,7 +253,7 @@ export default function DashboardPage() {
 
     if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
       apiResponse.segmentBreakdown.forEach(item => {
-        let py = item.pyType || item.room_type || item.facility_name || ""
+        let py = item.pyType || item.room_type || item.shop_name || ""
         const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
         
         if (py.includes("16")) sold16 += rn
@@ -275,7 +275,7 @@ export default function DashboardPage() {
     // 가이드에 따라 대시보드 매출액 실적은 객실 부서 순매출(ROOM + ROOM OTHER)만 집계하여 비교해야 함
     if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
       const roomTotalItem = apiResponse.dailyReportBreakdown.find(
-        (x: any) => x.category === "ROOM" && (x.name === "객실 Total" || x.name === "ROOM")
+        (x: any) => x.category_code === "ROOM" && (x.shop_name === "객실 Total" || x.shop_name === "ROOM")
       )
       if (roomTotalItem) {
         return Number(roomTotalItem.mtd_actual || 0)
@@ -438,14 +438,14 @@ export default function DashboardPage() {
 
   // Channel Detail Column Definitions
 
-  const channelColDefs = useMemo<ColDef<V3ChannelBreakdownItem>[]>(() => [
+  const channelColDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
     { 
       headerName: "채널명", 
       filter: true, 
       sortable: true, 
       width: 220, 
       cellStyle: { textAlign: 'left' },
-      valueGetter: (p) => p.data?.channel_name || p.data?.facility_name || "" 
+      valueGetter: (p) => p.data?.shop_name || "" 
     },
     { 
       field: "today_actual", 
@@ -504,7 +504,7 @@ export default function DashboardPage() {
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.channelBreakdown) return []
     return apiResponse.channelBreakdown.map(item => ({
-      name: item.channel_name || item.facility_name || "",
+      name: item.shop_name || "",
       revenue: Math.round(Number(item.today_actual || 0) / 1000)
     }))
   }, [apiResponse])
@@ -512,11 +512,11 @@ export default function DashboardPage() {
   const rateCodeMap = useMemo(() => {
     const map: { [key: string]: { roomsSold: number; revenue: number } } = {}
     if (apiResponse && Array.isArray(apiResponse.rateCodeBreakdown)) {
-      apiResponse.rateCodeBreakdown.forEach((item: V3RateCodeBreakdownItem) => {
-        const code = item.rateCode
+      apiResponse.rateCodeBreakdown.forEach((item: V3ReportBreakdownItem) => {
+        const code = item.rateCode || "UNKNOWN"
         map[code] = {
           roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
-          revenue: Number(item.revenue || 0)
+          revenue: Number(item.today_actual || 0)
         }
       })
     }
@@ -576,13 +576,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">선택 기간 실제 매출</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.today?.actual || 0).toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today?.ly_actual || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today_ly ?? apiResponse?.today?.ly_actual ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider">당월 누적 매출 (MTD)</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.mtd?.actual || 0).toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.mtd?.ly_actual || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.mtd_actual ?? apiResponse?.mtd?.actual ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.mtd_ly ?? apiResponse?.mtd?.ly_actual ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">연간 누적 매출 (YTD)</h4>

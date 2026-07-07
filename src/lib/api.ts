@@ -11,51 +11,62 @@ export interface V3ChartDataItem {
   value: number;
 }
 
+// New V3 Normalized Spec
 export interface V3ReportBreakdownItem {
-  category: string;
-  name: string;
-  facility_name?: string;
-  today_actual: string | number;
-  today_ly: string | number;
-  mtd_actual: string | number;
-  mtd_ly: string | number;
-  ytd_actual: string | number;
-  ytd_ly: string | number;
-}
-
-export interface V3ChannelBreakdownItem {
-  channel_name: string;
-  facility_name?: string;
-  today_actual: string | number;
-  today_ly: string | number;
-  mtd_actual: string | number;
-  mtd_ly: string | number;
-  ytd_actual: string | number;
-  ytd_ly: string | number;
-}
-
-export interface V3RateCodeBreakdownItem {
-  rateCode: string;
-  segment: string;
+  category_code: string;
+  category_name: string;
+  shop_name: string;
+  today_actual: number;
+  today_ly: number;
+  mtd_actual: number;
+  mtd_ly: number;
+  ytd_actual: number;
+  ytd_ly: number;
+  
+  // Keep these as optional for rateCodes, etc. where it might still send raw quantities
   roomsSold?: number;
+  rooms_sold?: number;
   rooms_sold_weighted?: number;
-  revenue: number;
+  room_nights?: number;
+  visitors?: number;
+  qty?: number;
+  
+  // RateCode/Segment fields
+  rateCode?: string;
+  segment?: string;
+  segment_name?: string;
+  room_type?: string;
+  pyType?: string;
+  capacity?: number;
+  total_capacity?: number;
+  period_capacity?: number;
 }
+
+export type V3ChannelBreakdownItem = V3ReportBreakdownItem;
+export type V3RateCodeBreakdownItem = V3ReportBreakdownItem;
 
 export interface V3RevenueResponse {
   startDate: string;
   endDate: string;
   date: string;
-  today: { actual: number; ly_actual: number };
-  mtd: { actual: number; ly_actual: number };
-  ytd: { actual: number; ly_actual: number };
+  today?: { actual: number; ly_actual: number; gross?: number; vat?: number };
+  mtd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
+  ytd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
+  
+  today_actual?: number;
+  today_ly?: number;
+  mtd_actual?: number;
+  mtd_ly?: number;
+  ytd_actual?: number;
+  ytd_ly?: number;
+
   gridData: V3GridDataItem[];
   chartData: V3ChartDataItem[];
   dailyReportBreakdown: V3ReportBreakdownItem[];
-  segmentBreakdown: any[];
-  channelBreakdown: V3ChannelBreakdownItem[];
-  rateCodeBreakdown: V3RateCodeBreakdownItem[];
-  roomTypeBreakdown?: any[];
+  segmentBreakdown: V3ReportBreakdownItem[];
+  channelBreakdown: V3ReportBreakdownItem[];
+  rateCodeBreakdown: V3ReportBreakdownItem[];
+  roomTypeBreakdown?: V3ReportBreakdownItem[];
 }
 
 export interface Targets {
