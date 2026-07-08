@@ -115,9 +115,19 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
     throw new Error(`백엔드 오류 (${response.status}): ${errorDetail}`);
   }
 
-  const json = await response.json();
+  let json = await response.json();
+  
+  // 방어적 파싱: 백엔드가 이중 인코딩된 JSON 문자열을 반환하는 경우 대비
+  if (typeof json === 'string') {
+    try {
+      json = JSON.parse(json);
+    } catch (e) {
+      console.warn("이중 인코딩 JSON 파싱 실패", e);
+    }
+  }
+
   // V5 returns { success: true, data: { ... } }
-  if (json.success && json.data) {
+  if (json && json.success && json.data) {
     return json.data as V3RevenueResponse;
   }
   return json as V3RevenueResponse;
