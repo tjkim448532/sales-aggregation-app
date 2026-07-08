@@ -925,6 +925,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
         <div className="h-[295px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
+              theme="legacy"
             rowData={matrixRowData}
             columnDefs={matrixColDefs}
             defaultColDef={{ 
@@ -949,6 +950,7 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-gray-200">1-2. 객실 평수별 마켓 채널 실적 (V5)</h2>
           <div className="h-[350px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
             <AgGridReact
+              theme="legacy"
               rowData={apiResponse?.roomMarketBreakdown || []}
               columnDefs={roomMarketColDefs}
               defaultColDef={{ 
@@ -1004,6 +1006,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
+              theme="legacy"
             rowData={mergeBreakdownData(apiResponse?.channelBreakdown || [])}
             columnDefs={channelColDefs}
             defaultColDef={{ 
@@ -1026,6 +1029,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-gray-200">2-2. 티켓/레저 영업장별 실적 (방문객 및 매출)</h2>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
+              theme="legacy"
             rowData={mergeBreakdownData((apiResponse as any)?.ticketFacilityBreakdown || [])}
             columnDefs={ticketColDefs}
             defaultColDef={{ 
@@ -1114,6 +1118,7 @@ export default function DashboardPage() {
         </h2>
         <div className="h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
+              theme="legacy"
             rowData={dailyReportRowData}
             columnDefs={dailyReportColDefs}
             defaultColDef={{ 
