@@ -1,4 +1,4 @@
-import { V3ReportBreakdownItem } from "./api";
+import { DashboardBreakdownItem, DashboardRevenueResponse } from "./api";
 
 export function cleanShopName(name?: string): string {
   if (!name) return "알수없음";
@@ -8,10 +8,70 @@ export function cleanShopName(name?: string): string {
     .replace(/\(\d{4}\)/g, "");
 }
 
-export function mergeBreakdownData(data: V3ReportBreakdownItem[]): V3ReportBreakdownItem[] {
+export function aggregateDateRangeData(jsonArray: any[]): DashboardRevenueResponse | null {
+  if (!Array.isArray(jsonArray) || jsonArray.length === 0) return null;
+  
+  let aggregatedData: any = null;
+  
+  for (const item of jsonArray) {
+    if (!item || !item.success || !item.data) continue;
+    const data = item.data;
+    
+    if (!aggregatedData) {
+      aggregatedData = JSON.parse(JSON.stringify(data));
+      continue;
+    }
+    
+    // 일일 매출 합산
+    if (data.today && aggregatedData.today) {
+      aggregatedData.today.actual += (data.today.actual || 0);
+      aggregatedData.today.ly_actual += (data.today.ly_actual || 0);
+    }
+    
+    // 각 Summary 일일 매출 합산 및 누적 지표는 마지막 날짜로 덮어쓰기
+    const summaries = ['roomSummary', 'golfSummary', 'ticketSummary', 'fnbSummary'];
+    for (const sum of summaries) {
+      if (data[sum] && aggregatedData[sum]) {
+         const revKey = sum === 'roomSummary' ? 'totalRoomRevenue' 
+                      : sum === 'golfSummary' ? 'totalGolfRevenue' 
+                      : sum === 'ticketSummary' ? 'totalTicketRevenue' 
+                      : 'totalFnbRevenue';
+                      
+         aggregatedData[sum][revKey] += (data[sum][revKey] || 0);
+         if (sum === 'roomSummary') {
+           aggregatedData[sum].totalRoomsSold += (data[sum].totalRoomsSold || 0);
+         }
+         aggregatedData[sum].mtd_actual = data[sum].mtd_actual;
+         aggregatedData[sum].ytd_actual = data[sum].ytd_actual;
+      }
+    }
+    
+    if (data.mtd) aggregatedData.mtd = data.mtd;
+    if (data.ytd) aggregatedData.ytd = data.ytd;
+    
+    // 기간 조회 시 breakdown 데이터는 원본 배열들을 모두 concat 합니다.
+    // page.tsx의 mergeBreakdownData가 나중에 합산(sum) 처리를 해줍니다.
+    if (data.dailyReportBreakdown) {
+      aggregatedData.dailyReportBreakdown = (aggregatedData.dailyReportBreakdown || []).concat(data.dailyReportBreakdown);
+    }
+    if (data.segmentBreakdown) {
+      aggregatedData.segmentBreakdown = (aggregatedData.segmentBreakdown || []).concat(data.segmentBreakdown);
+    }
+    if (data.channelBreakdown) {
+      aggregatedData.channelBreakdown = (aggregatedData.channelBreakdown || []).concat(data.channelBreakdown);
+    }
+    
+    aggregatedData.endDate = data.date;
+    aggregatedData.date = data.date;
+  }
+  
+  return aggregatedData as DashboardRevenueResponse;
+}
+
+export function mergeBreakdownData(data: DashboardBreakdownItem[]): DashboardBreakdownItem[] {
   if (!data || !Array.isArray(data)) return [];
 
-  const map = new Map<string, V3ReportBreakdownItem>();
+  const map = new Map<string, DashboardBreakdownItem>();
 
   for (const item of data) {
     const rawItem = item as any;
@@ -30,12 +90,19 @@ export function mergeBreakdownData(data: V3ReportBreakdownItem[]): V3ReportBreak
       const existing = map.get(cleanName)! as any;
       const fieldsToSum = [
         "today_actual", "vat", "gross", "today_ly",
-        "mtd_actual", "mtd_ly", "ytd_actual", "ytd_ly",
         "qty", "visitors", "roomsSold", "revenue"
       ];
+      // Note: mtd_actual, ytd_actual 등 누적값은 단순히 합산하면 안 되므로 합산 배열에서 제외했습니다. (마지막 날짜 기준 유지)
       for (const field of fieldsToSum) {
         if (rawItem[field] !== undefined || existing[field] !== undefined) {
           existing[field] = (Number(existing[field]) || 0) + (Number(rawItem[field]) || 0);
+        }
+      }
+      // 누적 데이터는 병합 과정에서 마지막 배열 원소(가장 최신)의 값을 덮어씁니다.
+      const cumulativeFields = ["mtd_actual", "mtd_ly", "ytd_actual", "ytd_ly"];
+      for (const field of cumulativeFields) {
+        if (rawItem[field] !== undefined) {
+          existing[field] = Number(rawItem[field]) || 0;
         }
       }
     }
@@ -44,7 +111,7 @@ export function mergeBreakdownData(data: V3ReportBreakdownItem[]): V3ReportBreak
   return Array.from(map.values());
 }
 
-export interface HierarchicalRow extends V3ReportBreakdownItem {
+export interface HierarchicalRow extends DashboardBreakdownItem {
   isGroup?: boolean;
   isFooter?: boolean;
   isChild?: boolean;
@@ -53,7 +120,7 @@ export interface HierarchicalRow extends V3ReportBreakdownItem {
 }
 
 export function buildHierarchicalRows(
-  data: V3ReportBreakdownItem[],
+  data: DashboardBreakdownItem[],
   expandedCategories: Record<string, boolean>
 ): HierarchicalRow[] {
   const merged = mergeBreakdownData(data);

@@ -1,4 +1,4 @@
-export interface V3GridDataItem {
+export interface DashboardGridDataItem {
   depth1: string;
   depth2: string;
   depth3: string;
@@ -6,13 +6,12 @@ export interface V3GridDataItem {
   quantity: number;
 }
 
-export interface V3ChartDataItem {
+export interface DashboardChartDataItem {
   name: string;
   value: number;
 }
 
-// New V3 Normalized Spec
-export interface V3ReportBreakdownItem {
+export interface DashboardBreakdownItem {
   category_code: string;
   category_name: string;
   shop_name?: string;
@@ -25,7 +24,7 @@ export interface V3ReportBreakdownItem {
   ytd_actual: number;
   ytd_ly: number;
   
-  // Keep these as optional for rateCodes, etc. where it might still send raw quantities
+  // Additional quantities
   roomsSold?: number;
   rooms_sold?: number;
   rooms_sold_weighted?: number;
@@ -46,10 +45,10 @@ export interface V3ReportBreakdownItem {
   period_capacity?: number;
 }
 
-export type V3ChannelBreakdownItem = V3ReportBreakdownItem;
-export type V3RateCodeBreakdownItem = V3ReportBreakdownItem;
+export type DashboardChannelBreakdownItem = DashboardBreakdownItem;
+export type DashboardRateCodeBreakdownItem = DashboardBreakdownItem;
 
-export interface V3RevenueResponse {
+export interface DashboardRevenueResponse {
   startDate: string;
   endDate: string;
   date: string;
@@ -72,14 +71,14 @@ export interface V3RevenueResponse {
   ytd_actual?: number;
   ytd_ly?: number;
 
-  gridData: V3GridDataItem[];
-  chartData: V3ChartDataItem[];
-  dailyReportBreakdown: V3ReportBreakdownItem[];
-  segmentBreakdown: V3ReportBreakdownItem[];
-  channelBreakdown: V3ReportBreakdownItem[];
-  rateCodeBreakdown: V3ReportBreakdownItem[];
-  roomTypeBreakdown?: V3ReportBreakdownItem[];
-  roomMarketBreakdown?: V3ReportBreakdownItem[];
+  gridData: DashboardGridDataItem[];
+  chartData: DashboardChartDataItem[];
+  dailyReportBreakdown: DashboardBreakdownItem[];
+  segmentBreakdown: DashboardBreakdownItem[];
+  channelBreakdown: DashboardBreakdownItem[];
+  rateCodeBreakdown: DashboardBreakdownItem[];
+  roomTypeBreakdown?: DashboardBreakdownItem[];
+  roomMarketBreakdown?: DashboardBreakdownItem[];
 }
 
 export interface Targets {
@@ -93,7 +92,9 @@ const getApiBase = () => {
   return "";
 };
 
-export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
+import { aggregateDateRangeData } from './dataNormaliser';
+
+export const fetchRevenueRange = async (startDate: string, endDate: string): Promise<any> => {
   const apiBase = getApiBase();
 
   const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
@@ -114,63 +115,23 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
     throw new Error(`백엔드 오류 (${response.status}): ${errorDetail}`);
   }
 
-  const json = await response.json();
+  return await response.json();
+};
+
+export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<DashboardRevenueResponse | null> => {
+  const json = await fetchRevenueRange(startDate, endDate);
 
   // V5 API가 기간 검색 시 배열을 반환하는 경우 처리 (정규화 레이어)
   if (Array.isArray(json) && json.length > 0) {
-    // 가장 안전한 방식: 누적 데이터(MTD/YTD) 보호를 위해 마지막 날짜(endDate) 데이터를 기준으로 하되,
-    // 기간 내 일일 실적(today_actual, totalRoomRevenue 등)을 합산하여 단일 객체로 만듭니다.
-    let aggregatedData: any = null;
-    
-    for (const item of json) {
-      if (!item || !item.success || !item.data) continue;
-      const data = item.data;
-      
-      if (!aggregatedData) {
-        aggregatedData = JSON.parse(JSON.stringify(data));
-        continue;
-      }
-      
-      // 일일 매출 합산
-      if (data.today && aggregatedData.today) {
-        aggregatedData.today.actual += (data.today.actual || 0);
-        aggregatedData.today.ly_actual += (data.today.ly_actual || 0);
-      }
-      
-      // 각 Summary 일일 매출 합산 및 누적 지표는 마지막 날짜로 덮어쓰기
-      const summaries = ['roomSummary', 'golfSummary', 'ticketSummary', 'fnbSummary'];
-      for (const sum of summaries) {
-        if (data[sum] && aggregatedData[sum]) {
-           const revKey = sum === 'roomSummary' ? 'totalRoomRevenue' 
-                        : sum === 'golfSummary' ? 'totalGolfRevenue' 
-                        : sum === 'ticketSummary' ? 'totalTicketRevenue' 
-                        : 'totalFnbRevenue';
-                        
-           aggregatedData[sum][revKey] += (data[sum][revKey] || 0);
-           if (sum === 'roomSummary') {
-             aggregatedData[sum].totalRoomsSold += (data[sum].totalRoomsSold || 0);
-           }
-           aggregatedData[sum].mtd_actual = data[sum].mtd_actual;
-           aggregatedData[sum].ytd_actual = data[sum].ytd_actual;
-        }
-      }
-      
-      if (data.mtd) aggregatedData.mtd = data.mtd;
-      if (data.ytd) aggregatedData.ytd = data.ytd;
-      
-      aggregatedData.endDate = data.date;
-      aggregatedData.date = data.date;
-    }
-    
-    return aggregatedData as V3RevenueResponse;
+    return aggregateDateRangeData(json) as DashboardRevenueResponse;
   }
 
   // V5 returns { success: true, data: { ... } }
   if (json && json.success && json.data) {
-    return json.data as V3RevenueResponse;
+    return json.data as DashboardRevenueResponse;
   }
   
-  return json as V3RevenueResponse;
+  return json as DashboardRevenueResponse;
 };
 
 export const fetchTargets = async (year: number, month: number): Promise<Targets> => {
@@ -221,18 +182,35 @@ export const fetchRevenueTrends = async (startDate: string, endDate: string) => 
   
   const days = eachDayOfInterval({ start, end });
   
-  const promises = days.map(day => {
-    const formattedDate = format(day, 'yyyy-MM-dd');
-    return fetchDailyRevenue(formattedDate, formattedDate);
-  });
-
-  const results = await Promise.all(promises);
+  // V5 API 최적화: 날짜별로 수십 번 API를 호출하지 않고, 단 1번의 기간 조회로 전체 데이터를 가져옵니다.
+  let jsonArray: any = [];
+  try {
+    const rawData = await fetchRevenueRange(startDate, endDate);
+    if (Array.isArray(rawData)) {
+      jsonArray = rawData;
+    } else if (rawData && rawData.success && Array.isArray(rawData.data)) {
+      jsonArray = rawData.data;
+    } else if (rawData && rawData.data) {
+      jsonArray = [rawData.data];
+    }
+  } catch (e) {
+    console.error("Failed to fetch revenue trends:", e);
+  }
   
-  return results.map((res, idx) => {
+  return days.map(day => {
+    const formattedDate = format(day, 'yyyy-MM-dd');
+    // 가져온 원본 배열에서 해당 날짜의 데이터를 찾습니다.
+    const dayData = jsonArray.find((item: any) => {
+       const target = item.data || item;
+       return target.date === formattedDate;
+    });
+    
+    const targetData = dayData ? (dayData.data || dayData) : null;
+    
     return {
-      date: format(days[idx], 'yyyy-MM-dd'),
-      totalSales: res?.roomSummary?.totalRoomRevenue || res?.today_actual || 0,
-      totalRooms: res?.roomSummary?.totalRoomsSold || 0,
+      date: formattedDate,
+      totalSales: targetData?.roomSummary?.totalRoomRevenue || targetData?.today_actual || targetData?.today?.actual || 0,
+      totalRooms: targetData?.roomSummary?.totalRoomsSold || 0,
     };
   });
 };

@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { type V3RevenueResponse } from "./api";
+import { type DashboardRevenueResponse } from "./api";
 import rateCodesData from "@/data/rate_codes.json";
 
 // Replicate segment matrix calculation logic
@@ -154,7 +154,7 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
 }
 
 export async function exportDashboardToExcel(
-  apiResponse: V3RevenueResponse | null,
+  apiResponse: DashboardRevenueResponse | null,
   startDate: string,
   endDate: string,
   targetConfig: { targetRn: number; targetRev: number; targetOcc: number }

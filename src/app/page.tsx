@@ -7,7 +7,7 @@ import { AgGridReact } from "ag-grid-react"
 import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule, ValidationModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, fetchTargets } from "@/lib/api"
+import { fetchDailyRevenue, type DashboardRevenueResponse, type DashboardBreakdownItem, fetchTargets } from "@/lib/api"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
@@ -178,7 +178,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
 export default function DashboardPage() {
   const [startDate, setStartDate] = useState<string>("2026-06-01")
   const [endDate, setEndDate] = useState<string>("2026-06-30")
-  const [apiResponse, setApiResponse] = useState<V3RevenueResponse | null>(null)
+  const [apiResponse, setApiResponse] = useState<DashboardRevenueResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
@@ -269,70 +269,39 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const actualRn = useMemo(() => {
-    if (apiResponse?.roomSummary?.totalRoomsSold !== undefined) {
-      return apiResponse.roomSummary.totalRoomsSold;
-    }
-    // 백엔드가 이미 51평에 x2 가중치를 적용해서 roomsSold를 내려주므로, 추가 가중치 없이 단순히 합산합니다.
-    return periodRoomsSold.sold16 + periodRoomsSold.sold35 + periodRoomsSold.sold51 + periodRoomsSold.soldEtc
-  }, [periodRoomsSold, apiResponse])
+    return apiResponse?.roomSummary?.totalRoomsSold || 0;
+  }, [apiResponse])
 
   const actualRev = useMemo(() => {
-    if (apiResponse?.roomSummary?.totalRoomRevenue !== undefined) {
-      return apiResponse.roomSummary.totalRoomRevenue;
-    }
-    // 가이드에 따라 대시보드 매출액 실적은 객실 부서 순매출(ROOM + ROOM OTHER)만 집계하여 비교해야 함
-    if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
-      const roomTotalItem = apiResponse.dailyReportBreakdown.find(
-        (x: any) => x.category_code === "ROOM" && (x.shop_name === "객실 Total" || x.shop_name === "ROOM")
-      )
-      if (roomTotalItem) {
-        return Number(roomTotalItem.mtd_actual || 0)
-      }
-    }
-    return apiResponse?.mtd?.actual || 0
+    return apiResponse?.roomSummary?.totalRoomRevenue || 0;
   }, [apiResponse])
 
   const totalToday = useMemo(() => {
-    console.log("=== DEBUG apiResponse ===", apiResponse);
-    if (apiResponse?.roomSummary) {
-      const sum = (apiResponse.roomSummary.totalRoomRevenue || 0) +
-             (apiResponse.golfSummary?.totalGolfRevenue || 0) +
-             (apiResponse.ticketSummary?.totalTicketRevenue || 0) +
-             (apiResponse.fnbSummary?.totalFnbRevenue || 0);
-      console.log("=== DEBUG sum ===", sum);
-      return sum;
-    }
-    return apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0;
+    return (apiResponse?.roomSummary?.totalRoomRevenue || 0) +
+           (apiResponse?.golfSummary?.totalGolfRevenue || 0) +
+           (apiResponse?.ticketSummary?.totalTicketRevenue || 0) +
+           (apiResponse?.fnbSummary?.totalFnbRevenue || 0);
   }, [apiResponse]);
 
   const totalTodayLy = useMemo(() => {
-    if (apiResponse?.roomSummary) {
-      return (apiResponse.roomSummary.today_ly || 0) +
-             (apiResponse.golfSummary?.today_ly || 0) +
-             (apiResponse.ticketSummary?.today_ly || 0) +
-             (apiResponse.fnbSummary?.today_ly || 0);
-    }
-    return apiResponse?.today_ly ?? apiResponse?.today?.ly_actual ?? 0;
+    return (apiResponse?.roomSummary?.today_ly || 0) +
+           (apiResponse?.golfSummary?.today_ly || 0) +
+           (apiResponse?.ticketSummary?.today_ly || 0) +
+           (apiResponse?.fnbSummary?.today_ly || 0);
   }, [apiResponse]);
 
   const totalMtd = useMemo(() => {
-    if (apiResponse?.roomSummary) {
-      return (apiResponse.roomSummary.mtd_actual || 0) +
-             (apiResponse.golfSummary?.mtd_actual || 0) +
-             (apiResponse.ticketSummary?.mtd_actual || 0) +
-             (apiResponse.fnbSummary?.mtd_actual || 0);
-    }
-    return apiResponse?.mtd_actual ?? apiResponse?.mtd?.actual ?? 0;
+    return (apiResponse?.roomSummary?.mtd_actual || 0) +
+           (apiResponse?.golfSummary?.mtd_actual || 0) +
+           (apiResponse?.ticketSummary?.mtd_actual || 0) +
+           (apiResponse?.fnbSummary?.mtd_actual || 0);
   }, [apiResponse]);
 
   const totalYtd = useMemo(() => {
-    if (apiResponse?.roomSummary) {
-      return (apiResponse.roomSummary.ytd_actual || 0) +
-             (apiResponse.golfSummary?.ytd_actual || 0) +
-             (apiResponse.ticketSummary?.ytd_actual || 0) +
-             (apiResponse.fnbSummary?.ytd_actual || 0);
-    }
-    return apiResponse?.ytd_actual ?? apiResponse?.ytd?.actual ?? 0;
+    return (apiResponse?.roomSummary?.ytd_actual || 0) +
+           (apiResponse?.golfSummary?.ytd_actual || 0) +
+           (apiResponse?.ticketSummary?.ytd_actual || 0) +
+           (apiResponse?.fnbSummary?.ytd_actual || 0);
   }, [apiResponse]);
 
   const actualOcc = useMemo(() => {
@@ -488,7 +457,7 @@ export default function DashboardPage() {
   }, [])
 
   // V5 Room Market Breakdown Column Definitions
-  const roomMarketColDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
+  const roomMarketColDefs = useMemo<ColDef<DashboardBreakdownItem>[]>(() => [
     { 
       headerName: "객실 평수", 
       field: "facility_name", 
@@ -525,7 +494,7 @@ export default function DashboardPage() {
 
   // Channel Detail Column Definitions
 
-  const channelColDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
+  const channelColDefs = useMemo<ColDef<DashboardBreakdownItem>[]>(() => [
     { 
       headerName: "채널명", 
       filter: true, 
@@ -680,7 +649,7 @@ export default function DashboardPage() {
   const rateCodeMap = useMemo(() => {
     const map: { [key: string]: { roomsSold: number; revenue: number } } = {}
     if (apiResponse && Array.isArray(apiResponse.rateCodeBreakdown)) {
-      apiResponse.rateCodeBreakdown.forEach((item: V3ReportBreakdownItem) => {
+      apiResponse.rateCodeBreakdown.forEach((item: DashboardBreakdownItem) => {
         const code = item.rateCode || "UNKNOWN"
         map[code] = {
           roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
