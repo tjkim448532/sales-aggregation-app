@@ -89,12 +89,8 @@ export interface Targets {
 }
 
 const getApiBase = () => {
-  // 로컬 개발 환경에서는 Next.js 프록시를 사용 (CORS 회피)
-  if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-    return "";
-  }
-  // Vercel 배포 또는 Firebase 웹 호스팅(Production)에서는 프록시 대신 백엔드 API 직접 호출
-  return "https://belleforet-data.vercel.app";
+  // Use Next.js proxy to bypass CORS
+  return "";
 };
 
 export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
