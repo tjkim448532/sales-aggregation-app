@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // 임시 로컬 DB (Firebase 도입 전)
-const DATA_FILE = path.join(process.cwd(), 'goals_db.json');
+const DATA_FILE = path.join(os.tmpdir(), 'goals_db.json');
 
 // 초기 데이터 구조 보장
 const initDB = () => {

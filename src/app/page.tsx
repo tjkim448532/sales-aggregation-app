@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { format, subDays } from "date-fns"
 import { Download, Search, RefreshCw, AlertCircle, Target, Info } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
-import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
+import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule, ValidationModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
 import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, fetchTargets } from "@/lib/api"
@@ -15,7 +15,7 @@ import Link from "next/link"
 import { exportDashboardToExcel } from "@/lib/excelExport"
 import { mergeBreakdownData, buildHierarchicalRows, HierarchicalRow } from "@/lib/dataNormaliser"
 
-ModuleRegistry.registerModules([AllCommunityModule])
+ModuleRegistry.registerModules([AllCommunityModule, ValidationModule])
 
 interface SegmentMatrixRow {
   metric: string;
