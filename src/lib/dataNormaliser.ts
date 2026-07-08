@@ -34,7 +34,7 @@ export function mergeBreakdownData(data: V3ReportBreakdownItem[]): V3ReportBreak
         "qty", "visitors", "roomsSold", "revenue"
       ];
       for (const field of fieldsToSum) {
-        if (typeof rawItem[field] === "number" || typeof existing[field] === "number") {
+        if (rawItem[field] !== undefined || existing[field] !== undefined) {
           existing[field] = (Number(existing[field]) || 0) + (Number(rawItem[field]) || 0);
         }
       }
@@ -111,8 +111,8 @@ export function buildHierarchicalRows(
 
     for (const child of children) {
       for (const field of fieldsToSum) {
-        if (typeof (child as any)[field] === "number") {
-          parentRow[field] = (Number(parentRow[field]) || 0) + Number((child as any)[field]);
+        if ((child as any)[field] !== undefined) {
+          parentRow[field] = (Number(parentRow[field]) || 0) + (Number((child as any)[field]) || 0);
         }
       }
     }
@@ -124,8 +124,8 @@ export function buildHierarchicalRows(
     }
 
     for (const field of fieldsToSum) {
-      if (typeof parentRow[field] === "number") {
-        grandTotal[field] = (Number(grandTotal[field]) || 0) + Number(parentRow[field]);
+      if (parentRow[field] !== undefined) {
+        grandTotal[field] = (Number(grandTotal[field]) || 0) + (Number(parentRow[field]) || 0);
       }
     }
   }
