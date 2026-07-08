@@ -89,18 +89,13 @@ export interface Targets {
 }
 
 const getApiBase = () => {
-  // 로컬 개발 환경에서는 Next.js 프록시를 사용 (CORS 회피)
-  if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-    return "";
-  }
-  // Firebase 웹 호스팅 등 배포 환경에서는 프록시 대신 백엔드 API 직접 호출
-  return "https://belleforet-data.vercel.app";
+  // Vercel 환경에서는 next.config.ts의 rewrites를 통한 프록시를 사용하여 CORS를 우회합니다.
+  return "";
 };
 
 export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<V3RevenueResponse | null> => {
   const apiBase = getApiBase();
 
-  // 백엔드 토큰 검증 우회용 mock_super_admin_token 헤더 추가 및 Vercel Edge 캐시 완전 우회를 위한 _t 파라미터 추가
   const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
     cache: "no-store",
     headers: {
@@ -121,10 +116,60 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
 
   const json = await response.json();
 
+  // V5 API가 기간 검색 시 배열을 반환하는 경우 처리 (정규화 레이어)
+  if (Array.isArray(json) && json.length > 0) {
+    // 가장 안전한 방식: 누적 데이터(MTD/YTD) 보호를 위해 마지막 날짜(endDate) 데이터를 기준으로 하되,
+    // 기간 내 일일 실적(today_actual, totalRoomRevenue 등)을 합산하여 단일 객체로 만듭니다.
+    let aggregatedData: any = null;
+    
+    for (const item of json) {
+      if (!item || !item.success || !item.data) continue;
+      const data = item.data;
+      
+      if (!aggregatedData) {
+        aggregatedData = JSON.parse(JSON.stringify(data));
+        continue;
+      }
+      
+      // 일일 매출 합산
+      if (data.today && aggregatedData.today) {
+        aggregatedData.today.actual += (data.today.actual || 0);
+        aggregatedData.today.ly_actual += (data.today.ly_actual || 0);
+      }
+      
+      // 각 Summary 일일 매출 합산 및 누적 지표는 마지막 날짜로 덮어쓰기
+      const summaries = ['roomSummary', 'golfSummary', 'ticketSummary', 'fnbSummary'];
+      for (const sum of summaries) {
+        if (data[sum] && aggregatedData[sum]) {
+           const revKey = sum === 'roomSummary' ? 'totalRoomRevenue' 
+                        : sum === 'golfSummary' ? 'totalGolfRevenue' 
+                        : sum === 'ticketSummary' ? 'totalTicketRevenue' 
+                        : 'totalFnbRevenue';
+                        
+           aggregatedData[sum][revKey] += (data[sum][revKey] || 0);
+           if (sum === 'roomSummary') {
+             aggregatedData[sum].totalRoomsSold += (data[sum].totalRoomsSold || 0);
+           }
+           aggregatedData[sum].mtd_actual = data[sum].mtd_actual;
+           aggregatedData[sum].ytd_actual = data[sum].ytd_actual;
+        }
+      }
+      
+      if (data.mtd) aggregatedData.mtd = data.mtd;
+      if (data.ytd) aggregatedData.ytd = data.ytd;
+      
+      aggregatedData.endDate = data.date;
+      aggregatedData.date = data.date;
+    }
+    
+    return aggregatedData as V3RevenueResponse;
+  }
+
   // V5 returns { success: true, data: { ... } }
   if (json && json.success && json.data) {
     return json.data as V3RevenueResponse;
   }
+  
   return json as V3RevenueResponse;
 };
 
