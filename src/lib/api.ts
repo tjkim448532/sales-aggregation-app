@@ -123,16 +123,16 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   return json as V3RevenueResponse;
 };
 
-// 백엔드 V3에 targets API가 없으므로 프론트엔드 LocalStorage를 사용하는 폴백(Fallback) 구현
 export const fetchTargets = async (year: number, month: number): Promise<Targets> => {
-  if (typeof window !== "undefined") {
-    const key = `targets_${year}_${month}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        return JSON.parse(saved) as Targets;
-      } catch (e) {}
+  try {
+    const res = await fetch(`/api/goals?year=${year}&month=${month}`);
+    if (!res.ok) throw new Error('Failed to fetch goals');
+    const json = await res.json();
+    if (json.success && json.data) {
+      return json.data as Targets;
     }
+  } catch (e) {
+    console.error('Failed to fetch targets from internal API:', e);
   }
   
   // 기본값 반환
@@ -150,15 +150,40 @@ export const saveTargets = async (payload: {
   targetRev: number;
   targetOcc: number;
 }): Promise<any> => {
-  if (typeof window !== "undefined") {
-    const key = `targets_${payload.year}_${payload.month}`;
-    localStorage.setItem(key, JSON.stringify({
-      targetRn: payload.targetRn,
-      targetRev: payload.targetRev,
-      targetOcc: payload.targetOcc
-    }));
-  }
+  const res = await fetch(`/api/goals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
   
-  return { success: true, message: "목표가 로컬 브라우저에 성공적으로 저장되었습니다." };
+  if (!res.ok) {
+    throw new Error('목표 저장에 실패했습니다.');
+  }
+
+  return await res.json();
+};
+
+import { eachDayOfInterval, parseISO, format } from 'date-fns';
+
+export const fetchRevenueTrends = async (startDate: string, endDate: string) => {
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  
+  const days = eachDayOfInterval({ start, end });
+  
+  const promises = days.map(day => {
+    const formattedDate = format(day, 'yyyy-MM-dd');
+    return fetchDailyRevenue(formattedDate, formattedDate);
+  });
+
+  const results = await Promise.all(promises);
+  
+  return results.map((res, idx) => {
+    return {
+      date: format(days[idx], 'yyyy-MM-dd'),
+      totalSales: res?.roomSummary?.totalRoomRevenue || res?.today_actual || 0,
+      totalRooms: res?.roomSummary?.totalRoomsSold || 0,
+    };
+  });
 };
 

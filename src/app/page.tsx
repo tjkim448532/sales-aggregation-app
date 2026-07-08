@@ -611,11 +611,28 @@ export default function DashboardPage() {
     }))
   }, [apiResponse])
 
+  const CHANNEL_ENUM: Record<string, string> = {
+    '기업영업(휴양소)': '휴양소',
+    '네이버휴양소': '휴양소',
+    '우리은행휴양소': '휴양소',
+    '온라인 여행사(자동)': '온라인',
+    '야놀자': '온라인',
+    '단체영업(세미나)': '단체영업'
+  };
+
+  const normalizeMarketType = (marketName?: string) => {
+    if (!marketName) return '기타';
+    if (CHANNEL_ENUM[marketName]) {
+      return CHANNEL_ENUM[marketName]; 
+    }
+    return marketName; // 사전에 없는 것은 원본 이름 유지
+  };
+
   const pieChartData = useMemo(() => {
-    if (!apiResponse || !apiResponse.roomMarketBreakdown) return []
+    if (!apiResponse || !Array.isArray(apiResponse.roomMarketBreakdown)) return []
     const map = new Map<string, number>()
     apiResponse.roomMarketBreakdown.forEach(item => {
-      const channel = item.channel_name || "기타"
+      const channel = normalizeMarketType(item.channel_name)
       const current = map.get(channel) || 0
       map.set(channel, current + Number(item.today_actual || 0))
     })
