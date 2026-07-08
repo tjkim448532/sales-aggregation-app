@@ -293,11 +293,14 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const totalToday = useMemo(() => {
+    console.log("=== DEBUG apiResponse ===", apiResponse);
     if (apiResponse?.roomSummary) {
-      return (apiResponse.roomSummary.totalRoomRevenue || 0) +
+      const sum = (apiResponse.roomSummary.totalRoomRevenue || 0) +
              (apiResponse.golfSummary?.totalGolfRevenue || 0) +
              (apiResponse.ticketSummary?.totalTicketRevenue || 0) +
              (apiResponse.fnbSummary?.totalFnbRevenue || 0);
+      console.log("=== DEBUG sum ===", sum);
+      return sum;
     }
     return apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0;
   }, [apiResponse]);
