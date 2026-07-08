@@ -54,11 +54,11 @@ export interface V3RevenueResponse {
   endDate: string;
   date: string;
   
-  // V5 properties
-  roomSummary?: { totalRoomRevenue: number; totalRoomsSold: number; };
-  golfSummary?: { totalGolfRevenue: number; };
-  ticketSummary?: { totalTicketRevenue: number; };
-  fnbSummary?: { totalFnbRevenue: number; };
+  // V5 properties (with ETL injected fields)
+  roomSummary?: { totalRoomRevenue: number; totalRoomsSold: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
+  golfSummary?: { totalGolfRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
+  ticketSummary?: { totalTicketRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
+  fnbSummary?: { totalFnbRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
 
   today?: { actual: number; ly_actual: number; gross?: number; vat?: number };
   mtd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
@@ -115,16 +115,7 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
     throw new Error(`백엔드 오류 (${response.status}): ${errorDetail}`);
   }
 
-  let json = await response.json();
-  
-  // 방어적 파싱: 백엔드가 이중 인코딩된 JSON 문자열을 반환하는 경우 대비
-  if (typeof json === 'string') {
-    try {
-      json = JSON.parse(json);
-    } catch (e) {
-      console.warn("이중 인코딩 JSON 파싱 실패", e);
-    }
-  }
+  const json = await response.json();
 
   // V5 returns { success: true, data: { ... } }
   if (json && json.success && json.data) {

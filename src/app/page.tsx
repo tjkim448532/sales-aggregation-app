@@ -302,6 +302,36 @@ export default function DashboardPage() {
     return apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0;
   }, [apiResponse]);
 
+  const totalTodayLy = useMemo(() => {
+    if (apiResponse?.roomSummary) {
+      return (apiResponse.roomSummary.today_ly || 0) +
+             (apiResponse.golfSummary?.today_ly || 0) +
+             (apiResponse.ticketSummary?.today_ly || 0) +
+             (apiResponse.fnbSummary?.today_ly || 0);
+    }
+    return apiResponse?.today_ly ?? apiResponse?.today?.ly_actual ?? 0;
+  }, [apiResponse]);
+
+  const totalMtd = useMemo(() => {
+    if (apiResponse?.roomSummary) {
+      return (apiResponse.roomSummary.mtd_actual || 0) +
+             (apiResponse.golfSummary?.mtd_actual || 0) +
+             (apiResponse.ticketSummary?.mtd_actual || 0) +
+             (apiResponse.fnbSummary?.mtd_actual || 0);
+    }
+    return apiResponse?.mtd_actual ?? apiResponse?.mtd?.actual ?? 0;
+  }, [apiResponse]);
+
+  const totalYtd = useMemo(() => {
+    if (apiResponse?.roomSummary) {
+      return (apiResponse.roomSummary.ytd_actual || 0) +
+             (apiResponse.golfSummary?.ytd_actual || 0) +
+             (apiResponse.ticketSummary?.ytd_actual || 0) +
+             (apiResponse.fnbSummary?.ytd_actual || 0);
+    }
+    return apiResponse?.ytd_actual ?? apiResponse?.ytd?.actual ?? 0;
+  }, [apiResponse]);
+
   const actualOcc = useMemo(() => {
     const cap16 = dynamicCapacities["16PY"] || 90 * diffDays
     const cap35 = dynamicCapacities["35PY"] || 90 * diffDays
@@ -753,17 +783,17 @@ export default function DashboardPage() {
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">선택 기간 실제 매출</h4>
           <p className="text-2xl font-bold text-white mt-2">₩{totalToday.toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today_ly ?? apiResponse?.today?.ly_actual ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{totalTodayLy.toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider">당월 누적 매출 (MTD)</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.mtd_actual ?? apiResponse?.mtd?.actual ?? 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white mt-2">₩{totalMtd.toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.mtd_ly ?? apiResponse?.mtd?.ly_actual ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">연간 누적 매출 (YTD)</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.ytd?.actual || 0).toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.ytd?.ly_actual || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white mt-2">₩{totalYtd.toLocaleString()}</p>
+          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.ytd_ly ?? apiResponse?.ytd?.ly_actual ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md flex flex-col justify-center">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회 범위 기준 데이터 일자</h4>
