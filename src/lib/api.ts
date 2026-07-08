@@ -35,8 +35,10 @@ export interface V3ReportBreakdownItem {
   
   // RateCode/Segment fields
   rateCode?: string;
+  rate_code?: string;
   segment?: string;
   segment_name?: string;
+  channel_name?: string;
   room_type?: string;
   pyType?: string;
   capacity?: number;
@@ -51,6 +53,13 @@ export interface V3RevenueResponse {
   startDate: string;
   endDate: string;
   date: string;
+  
+  // V5 properties
+  roomSummary?: { totalRoomRevenue: number; totalRoomsSold: number; };
+  golfSummary?: { totalGolfRevenue: number; };
+  ticketSummary?: { totalTicketRevenue: number; };
+  fnbSummary?: { totalFnbRevenue: number; };
+
   today?: { actual: number; ly_actual: number; gross?: number; vat?: number };
   mtd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
   ytd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
@@ -70,6 +79,7 @@ export interface V3RevenueResponse {
   channelBreakdown: V3ReportBreakdownItem[];
   rateCodeBreakdown: V3ReportBreakdownItem[];
   roomTypeBreakdown?: V3ReportBreakdownItem[];
+  roomMarketBreakdown?: V3ReportBreakdownItem[];
 }
 
 export interface Targets {
@@ -87,7 +97,7 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   const apiBase = getApiBase();
 
   // 백엔드 토큰 검증 우회용 mock_super_admin_token 헤더 추가 및 Vercel Edge 캐시 완전 우회를 위한 _t 파라미터 추가
-  const response = await fetch(`${apiBase}/api/v3/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
+  const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
     cache: "no-store",
     headers: {
       "Authorization": "Bearer mock_super_admin_token"
@@ -106,6 +116,10 @@ export const fetchDailyRevenue = async (startDate: string, endDate: string): Pro
   }
 
   const json = await response.json();
+  // V5 returns { success: true, data: { ... } }
+  if (json.success && json.data) {
+    return json.data as V3RevenueResponse;
+  }
   return json as V3RevenueResponse;
 };
 

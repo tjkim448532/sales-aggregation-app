@@ -8,11 +8,12 @@ import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule } from "ag-grid
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
 import { fetchDailyRevenue, type V3RevenueResponse, type V3ReportBreakdownItem, fetchTargets } from "@/lib/api"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts"
 import DateRangePicker from "@/components/DateRangePicker"
 import rateCodesData from "@/data/rate_codes.json"
 import Link from "next/link"
 import { exportDashboardToExcel } from "@/lib/excelExport"
+import { mergeBreakdownData, buildHierarchicalRows, HierarchicalRow } from "@/lib/dataNormaliser"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -181,6 +182,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   
   const [targetConfig, setTargetConfig] = useState<any>({ targetRn: 0, targetRev: 0, targetOcc: 0 })
 
@@ -267,11 +269,17 @@ export default function DashboardPage() {
   }, [apiResponse])
 
   const actualRn = useMemo(() => {
+    if (apiResponse?.roomSummary?.totalRoomsSold !== undefined) {
+      return apiResponse.roomSummary.totalRoomsSold;
+    }
     // 백엔드가 이미 51평에 x2 가중치를 적용해서 roomsSold를 내려주므로, 추가 가중치 없이 단순히 합산합니다.
     return periodRoomsSold.sold16 + periodRoomsSold.sold35 + periodRoomsSold.sold51 + periodRoomsSold.soldEtc
-  }, [periodRoomsSold])
+  }, [periodRoomsSold, apiResponse])
 
   const actualRev = useMemo(() => {
+    if (apiResponse?.roomSummary?.totalRoomRevenue !== undefined) {
+      return apiResponse.roomSummary.totalRoomRevenue;
+    }
     // 가이드에 따라 대시보드 매출액 실적은 객실 부서 순매출(ROOM + ROOM OTHER)만 집계하여 비교해야 함
     if (apiResponse && Array.isArray(apiResponse.dailyReportBreakdown)) {
       const roomTotalItem = apiResponse.dailyReportBreakdown.find(
@@ -283,6 +291,16 @@ export default function DashboardPage() {
     }
     return apiResponse?.mtd?.actual || 0
   }, [apiResponse])
+
+  const totalToday = useMemo(() => {
+    if (apiResponse?.roomSummary) {
+      return (apiResponse.roomSummary.totalRoomRevenue || 0) +
+             (apiResponse.golfSummary?.totalGolfRevenue || 0) +
+             (apiResponse.ticketSummary?.totalTicketRevenue || 0) +
+             (apiResponse.fnbSummary?.totalFnbRevenue || 0);
+    }
+    return apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0;
+  }, [apiResponse]);
 
   const actualOcc = useMemo(() => {
     const cap16 = dynamicCapacities["16PY"] || 90 * diffDays
@@ -436,6 +454,42 @@ export default function DashboardPage() {
     return cols
   }, [])
 
+  // V5 Room Market Breakdown Column Definitions
+  const roomMarketColDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
+    { 
+      headerName: "객실 평수", 
+      field: "facility_name", 
+      filter: true, 
+      sortable: true, 
+      width: 150, 
+      cellStyle: { textAlign: 'center', fontWeight: 'bold' } as any
+    },
+    { 
+      headerName: "마켓 채널", 
+      field: "channel_name", 
+      filter: true, 
+      sortable: true, 
+      width: 200, 
+      cellStyle: { textAlign: 'left' } as any
+    },
+    { 
+      headerName: "판매객실수", 
+      field: "rooms_sold", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 140, 
+      valueFormatter: (p) => formatVal(p.value, "Rooms Sold") 
+    },
+    { 
+      headerName: "매출", 
+      field: "today_actual", 
+      filter: "agNumberColumnFilter", 
+      sortable: true, 
+      width: 150, 
+      valueFormatter: (p) => formatVal(p.value, "Revenue") 
+    }
+  ], [])
+
   // Channel Detail Column Definitions
 
   const channelColDefs = useMemo<ColDef<V3ReportBreakdownItem>[]>(() => [
@@ -544,8 +598,9 @@ export default function DashboardPage() {
   ], [])
 
   const matrixRowData = useMemo(() => {
-    return buildSegmentMatrix(apiResponse?.segmentBreakdown || [], diffDays, dynamicCapacities)
-  }, [apiResponse, diffDays, dynamicCapacities])
+    const diffDays = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
+    return buildSegmentMatrix(mergeBreakdownData(apiResponse?.segmentBreakdown || []), diffDays, dynamicCapacities)
+  }, [apiResponse, startDate, endDate, dynamicCapacities])
 
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.chartData) return []
@@ -555,6 +610,22 @@ export default function DashboardPage() {
       value: Math.round(Number(item.value || 0) / 1000)
     }))
   }, [apiResponse])
+
+  const pieChartData = useMemo(() => {
+    if (!apiResponse || !apiResponse.roomMarketBreakdown) return []
+    const map = new Map<string, number>()
+    apiResponse.roomMarketBreakdown.forEach(item => {
+      const channel = item.channel_name || "기타"
+      const current = map.get(channel) || 0
+      map.set(channel, current + Number(item.today_actual || 0))
+    })
+    
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [apiResponse])
+
+  const PIE_COLORS = ['#4f46e5', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316'];
 
   const rateCodeMap = useMemo(() => {
     const map: { [key: string]: { roomsSold: number; revenue: number } } = {}
@@ -569,6 +640,47 @@ export default function DashboardPage() {
     }
     return map
   }, [apiResponse])
+
+  const toggleCategory = (code: string) => {
+    setExpandedCategories(prev => ({ ...prev, [code]: !prev[code] }));
+  };
+
+  const dailyReportRowData = useMemo(() => {
+    return buildHierarchicalRows(apiResponse?.dailyReportBreakdown || [], expandedCategories);
+  }, [apiResponse, expandedCategories]);
+
+  const dailyReportColDefs = useMemo<ColDef<HierarchicalRow>[]>(() => [
+    {
+      headerName: "카테고리 / 영업장",
+      field: "categoryLabel",
+      width: 250,
+      cellStyle: { textAlign: 'left' },
+      cellRenderer: (p: any) => {
+        const data = p.data as HierarchicalRow;
+        if (data.isFooter) {
+          return <strong className="text-white text-base font-bold">{data.categoryLabel}</strong>;
+        }
+        if (data.isGroup) {
+          return (
+            <div 
+              className="flex items-center font-bold text-gray-100 cursor-pointer select-none" 
+              onClick={() => toggleCategory(data.category_code!)}
+            >
+              <span className="mr-2 inline-block w-4 text-center text-xs text-indigo-400">{data.expanded ? '▼' : '▶'}</span>
+              {data.categoryLabel}
+            </div>
+          );
+        }
+        return <div className="pl-6 text-gray-300">{data.shop_name || data.facility_name || (data as any).name}</div>;
+      }
+    },
+    { field: "today_actual", headerName: "금일 실적", filter: "agNumberColumnFilter", sortable: true, width: 140, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+    { field: "today_ly", headerName: "금일 전년", filter: "agNumberColumnFilter", sortable: true, width: 140, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+    { field: "mtd_actual", headerName: "MTD 실적", filter: "agNumberColumnFilter", sortable: true, width: 150, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+    { field: "mtd_ly", headerName: "MTD 전년", filter: "agNumberColumnFilter", sortable: true, width: 150, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+    { field: "ytd_actual", headerName: "YTD 실적", filter: "agNumberColumnFilter", sortable: true, width: 160, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+    { field: "ytd_ly", headerName: "YTD 전년", filter: "agNumberColumnFilter", sortable: true, width: 160, valueFormatter: (p) => formatVal(p.value, "Revenue") },
+  ], []);
 
   return (
     <div className="space-y-8 flex flex-col h-full">
@@ -623,7 +735,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">선택 기간 실제 매출</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{(apiResponse?.today_actual ?? apiResponse?.today?.actual ?? 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white mt-2">₩{totalToday.toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.today_ly ?? apiResponse?.today?.ly_actual ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
@@ -814,12 +926,68 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 1-2. 마켓 채널 상세 실적 (V5) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-3">
+          <h2 className="text-lg font-bold text-gray-200">1-2. 객실 평수별 마켓 채널 실적 (V5)</h2>
+          <div className="h-[350px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+            <AgGridReact
+              rowData={apiResponse?.roomMarketBreakdown || []}
+              columnDefs={roomMarketColDefs}
+              defaultColDef={{ 
+                resizable: true, 
+                wrapHeaderText: true, 
+                autoHeaderHeight: true, 
+                cellStyle: { textAlign: 'center' } 
+              }}
+              animateRows={true}
+              rowHeight={40}
+              headerHeight={42}
+              getRowStyle={() => undefined}
+              className="h-full w-full"
+            />
+          </div>
+        </div>
+
+        <div className="lg:col-span-1 space-y-3">
+          <h2 className="text-lg font-bold text-gray-200">채널별 매출 점유율</h2>
+          <div className="h-[350px] bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center justify-center">
+            {pieChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieChartData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {pieChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
+                    formatter={(value: any) => [`${Math.round(Number(value)/1000).toLocaleString()} 천원`, '매출']}
+                  />
+                  <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '11px', color: '#9CA3AF' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-gray-500 text-sm">데이터가 없습니다</div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* 2. 예약 채널별 객실 실적 */}
       <div className="space-y-3">
         <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
-            rowData={apiResponse?.channelBreakdown || []}
+            rowData={mergeBreakdownData(apiResponse?.channelBreakdown || [])}
             columnDefs={channelColDefs}
             defaultColDef={{ 
               resizable: true, 
@@ -841,7 +1009,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-gray-200">2-2. 티켓/레저 영업장별 실적 (방문객 및 매출)</h2>
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
-            rowData={(apiResponse as any)?.ticketFacilityBreakdown || []}
+            rowData={mergeBreakdownData((apiResponse as any)?.ticketFacilityBreakdown || [])}
             columnDefs={ticketColDefs}
             defaultColDef={{ 
               resizable: true, 
@@ -919,6 +1087,34 @@ export default function DashboardPage() {
               <Bar dataKey="value" fill="#4F46E5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 4. 전사 통합 실적 (Daily Report) */}
+      <div className="space-y-3 pb-10">
+        <h2 className="text-lg font-bold text-gray-200 flex items-center gap-2">
+          4. 전사 통합 실적 (Total Daily Report)
+        </h2>
+        <div className="h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            rowData={dailyReportRowData}
+            columnDefs={dailyReportColDefs}
+            defaultColDef={{ 
+              resizable: true, 
+              wrapHeaderText: true, 
+              autoHeaderHeight: true, 
+              cellStyle: { textAlign: 'center' } 
+            }}
+            animateRows={true}
+            rowHeight={40}
+            headerHeight={42}
+            getRowStyle={(params) => {
+              if (params.data?.isFooter) return { background: '#1e1b4b', borderTop: '2px solid #4f46e5' } as any;
+              if (params.data?.isGroup) return { background: '#1f2937' } as any;
+              return undefined;
+            }}
+            className="h-full w-full"
+          />
         </div>
       </div>
     </div>
