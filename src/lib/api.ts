@@ -56,7 +56,15 @@ export interface DashboardRevenueResponse {
   // V5 properties (with ETL injected fields)
   roomSummary?: { totalRoomRevenue: number; totalRoomsSold: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
   golfSummary?: { totalGolfRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
-  ticketSummary?: { totalTicketRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
+  ticketSummary?: { 
+    totalTicketRevenue: number; 
+    mtd_actual?: number; 
+    ytd_actual?: number; 
+    today_ly?: number; 
+    productLevelMapping?: { ticketName?: string; groupName: string }[];
+    facilityLevelMapping?: { facilityName?: string; groupName: string }[];
+    facilityBreakdown?: any[];
+  };
   fnbSummary?: { totalFnbRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
 
   today?: { actual: number; ly_actual: number; gross?: number; vat?: number };

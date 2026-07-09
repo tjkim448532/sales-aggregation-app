@@ -41,6 +41,7 @@ export function aggregateDateRangeData(jsonArray: any[]): DashboardRevenueRespon
          if (sum === 'roomSummary') {
            aggregatedData[sum].totalRoomsSold += (data[sum].totalRoomsSold || 0);
          }
+         aggregatedData[sum].today_ly = (aggregatedData[sum].today_ly || 0) + (data[sum].today_ly || 0);
          aggregatedData[sum].mtd_actual = data[sum].mtd_actual;
          aggregatedData[sum].ytd_actual = data[sum].ytd_actual;
       }
@@ -60,6 +61,21 @@ export function aggregateDateRangeData(jsonArray: any[]): DashboardRevenueRespon
     if (data.channelBreakdown) {
       aggregatedData.channelBreakdown = (aggregatedData.channelBreakdown || []).concat(data.channelBreakdown);
     }
+    if (data.rateCodeBreakdown) {
+      aggregatedData.rateCodeBreakdown = (aggregatedData.rateCodeBreakdown || []).concat(data.rateCodeBreakdown);
+    }
+    if (data.roomMarketBreakdown) {
+      aggregatedData.roomMarketBreakdown = (aggregatedData.roomMarketBreakdown || []).concat(data.roomMarketBreakdown);
+    }
+    if (data.golfFacilityBreakdown) {
+      aggregatedData.golfFacilityBreakdown = (aggregatedData.golfFacilityBreakdown || []).concat(data.golfFacilityBreakdown);
+    }
+    if (data.ticketFacilityBreakdown) {
+      aggregatedData.ticketFacilityBreakdown = (aggregatedData.ticketFacilityBreakdown || []).concat(data.ticketFacilityBreakdown);
+    }
+    if (data.fnbFacilityBreakdown) {
+      aggregatedData.fnbFacilityBreakdown = (aggregatedData.fnbFacilityBreakdown || []).concat(data.fnbFacilityBreakdown);
+    }
     
     aggregatedData.endDate = data.date;
     aggregatedData.date = data.date;
@@ -75,22 +91,35 @@ export function mergeBreakdownData(data: DashboardBreakdownItem[]): DashboardBre
 
   for (const item of data) {
     const rawItem = item as any;
-    const rawName = rawItem.shop_name || rawItem.facility_name || rawItem.name || rawItem.channel_name || rawItem.room_type || "";
-    const cleanName = cleanShopName(rawName);
+    
+    // Create a composite key to prevent squashing different channels of the same facility
+    const rawFacility = rawItem.facility_name || rawItem.shop_name || rawItem.room_type || rawItem.name || "";
+    const rawChannel = rawItem.channel_name || rawItem.segment_name || rawItem.segment || "";
+    
+    let cleanName = cleanShopName(rawFacility);
+    if (rawChannel && rawChannel !== rawFacility) {
+      cleanName += "_" + cleanShopName(rawChannel);
+    }
+    
+    // Fallback if both were empty
+    if (!cleanName) {
+      const rawName = rawItem.shop_name || rawItem.facility_name || rawItem.name || rawItem.channel_name || rawItem.room_type || "";
+      cleanName = cleanShopName(rawName);
+    }
 
     if (!map.has(cleanName)) {
       const cloned = { ...item } as any;
-      if (cloned.shop_name) cloned.shop_name = cleanName;
-      if (cloned.facility_name) cloned.facility_name = cleanName;
-      if (cloned.name) cloned.name = cleanName;
-      if (cloned.channel_name) cloned.channel_name = cleanName;
-      if (cloned.room_type) cloned.room_type = cleanName;
+      if (cloned.shop_name) cloned.shop_name = cleanShopName(cloned.shop_name);
+      if (cloned.facility_name) cloned.facility_name = cleanShopName(cloned.facility_name);
+      if (cloned.name) cloned.name = cleanShopName(cloned.name);
+      if (cloned.channel_name) cloned.channel_name = cleanShopName(cloned.channel_name);
+      if (cloned.room_type) cloned.room_type = cleanShopName(cloned.room_type);
       map.set(cleanName, cloned);
     } else {
       const existing = map.get(cleanName)! as any;
       const fieldsToSum = [
         "today_actual", "vat", "gross", "today_ly",
-        "qty", "visitors", "roomsSold", "revenue"
+        "qty", "visitors", "roomsSold", "rooms_sold", "revenue"
       ];
       // Note: mtd_actual, ytd_actual 등 누적값은 단순히 합산하면 안 되므로 합산 배열에서 제외했습니다. (마지막 날짜 기준 유지)
       for (const field of fieldsToSum) {

@@ -68,17 +68,12 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
       const rev = cellREV[cellKey] || 0;
       
       let adr = rn > 0 ? rev / rn : 0;
-      if (py === "51PY") {
-        // 백엔드가 51평 예약건수(roomsSold)를 이미 2배로 주므로, ADR 산출 시 건수(rn/2) 기준 분모 사용
-        adr = rn > 0 ? rev / (rn / 2) : 0;
-      }
       
       let occVal: any = 0;
       if (py === "16PY") {
-        // 51평 roomsSold는 이미 2배이므로 반(÷2)으로 나누어 더해줌
-        occVal = cap16 > 0 ? (rn16 + (rn51 / 2)) / cap16 : 0;
+        occVal = cap16 > 0 ? (rn16 + rn51) / cap16 : 0;
       } else if (py === "35PY") {
-        occVal = cap35 > 0 ? (rn35 + (rn51 / 2)) / cap35 : 0;
+        occVal = cap35 > 0 ? (rn35 + rn51) / cap35 : 0;
       } else if (py === "51PY" || py === "기타") {
         occVal = "-"; // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
@@ -119,18 +114,15 @@ function calculateSegmentMatrix(segmentBreakdown: any[], diffDays: number, capac
     getRow("매출액")[totalKey] = pyTotalREV;
     
     let pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0;
-    if (py === "51PY") {
-      pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / (pyTotalRN / 2) : 0;
-    }
     getRow("객단가(ADR)")[totalKey] = pyTotalAdr;
     
     let pyOccVal: any = 0;
     if (py === "16PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
-      pyOccVal = cap16 > 0 ? (pyTotalRN + (totalRN51 / 2)) / cap16 : 0;
+      pyOccVal = cap16 > 0 ? (pyTotalRN + totalRN51) / cap16 : 0;
     } else if (py === "35PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0);
-      pyOccVal = cap35 > 0 ? (pyTotalRN + (totalRN51 / 2)) / cap35 : 0;
+      pyOccVal = cap35 > 0 ? (pyTotalRN + totalRN51) / cap35 : 0;
     } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-";
     }

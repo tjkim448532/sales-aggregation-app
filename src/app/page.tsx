@@ -43,7 +43,7 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
   // 1. Loop through raw breakdown data to sum up roomsSold and revenue
   if (Array.isArray(segmentBreakdown)) {
     segmentBreakdown.forEach(item => {
-      const segNameRaw = item.segment || item.segment_name || ""
+      const segNameRaw = item.channel_name || item.segment || item.segment_name || ""
       const segName = segments.find(s => s === segNameRaw) || "기타"
 
       // Normalize pyType
@@ -89,17 +89,12 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
       const rev = cellREV[cellKey] || 0
       
       let adr = rn > 0 ? rev / rn : 0
-      if (py === "51PY") {
-        // 백엔드가 51평 예약건수(roomsSold)를 이미 2배로 주므로, ADR 산출 시 건수(rn/2) 기준 분모 사용
-        adr = rn > 0 ? rev / (rn / 2) : 0
-      }
       
       let occVal: any = 0
       if (py === "16PY") {
-        // 51평 roomsSold는 이미 2배이므로 반(÷2)으로 나누어 더해줌
-        occVal = cap16 > 0 ? ((rn16 + (rn51 / 2)) / cap16) * 100 : 0
+        occVal = cap16 > 0 ? ((rn16 + rn51) / cap16) * 100 : 0
       } else if (py === "35PY") {
-        occVal = cap35 > 0 ? ((rn35 + (rn51 / 2)) / cap35) * 100 : 0
+        occVal = cap35 > 0 ? ((rn35 + rn51) / cap35) * 100 : 0
       } else if (py === "51PY" || py === "기타") {
         occVal = "-" // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
       }
@@ -141,18 +136,15 @@ function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacitie
     getRow("매출액")[totalKey] = pyTotalREV
     
     let pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
-    if (py === "51PY") {
-      pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / (pyTotalRN / 2) : 0
-    }
     getRow("객단가(ADR)")[totalKey] = pyTotalAdr
     
     let pyOccVal: any = 0
     if (py === "16PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap16 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / cap16) * 100 : 0
+      pyOccVal = cap16 > 0 ? ((pyTotalRN + totalRN51) / cap16) * 100 : 0
     } else if (py === "35PY") {
       const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap35 > 0 ? ((pyTotalRN + (totalRN51 / 2)) / cap35) * 100 : 0
+      pyOccVal = cap35 > 0 ? ((pyTotalRN + totalRN51) / cap35) * 100 : 0
     } else if (py === "51PY" || py === "기타") {
       pyOccVal = "-"
     }
@@ -553,7 +545,65 @@ export default function DashboardPage() {
     }
   ], [])
 
+  const ticketGroupsMappedData = useMemo(() => {
+    if (!apiResponse) return []
+    
+    // (1) 이중 반복문 방지를 위해 사전을 만듭니다. O(1) 매칭
+    const productMap: Record<string, string> = {}
+    if (apiResponse.ticketSummary?.productLevelMapping) {
+      apiResponse.ticketSummary.productLevelMapping.forEach((item: any) => {
+        productMap[item.ticketName] = item.groupName
+      })
+    }
+
+    const facilityMap: Record<string, string> = {}
+    if (apiResponse.ticketSummary?.facilityLevelMapping) {
+      apiResponse.ticketSummary.facilityLevelMapping.forEach((item: any) => {
+        facilityMap[item.facilityName] = item.groupName
+      })
+    }
+
+    // (2) 병합된 원본 배열
+    const merged = mergeBreakdownData((apiResponse as any).ticketFacilityBreakdown || [])
+    
+    return merged.map(ticket => {
+      const t = ticket as any
+      const ticketName = t.ticketName || t.name || t.shop_name || t.facility_name || ""
+      const facilityName = t.facility_name || t.shop_name || ""
+      
+      // 1순위: 티켓 이름(Product)으로 찾기
+      let groupName = productMap[ticketName]
+      
+      // 2순위: 시설 이름(Facility)으로 찾기
+      if (!groupName) {
+        groupName = facilityMap[facilityName]
+      }
+      
+      // 3순위: 그래도 없으면 미분류
+      if (!groupName) {
+        groupName = '미분류'
+      }
+
+      return {
+        ...t,
+        groupName
+      }
+    })
+  }, [apiResponse])
+
   const ticketColDefs = useMemo<ColDef<any>[]>(() => [
+    { 
+      headerName: "그룹명", 
+      field: "groupName", 
+      filter: true, 
+      sortable: true, 
+      width: 120, 
+      cellStyle: (params) => ({ 
+        textAlign: 'center', 
+        fontWeight: 'bold',
+        color: params.value === '미분류' ? '#EF4444' : '#F59E0B'
+      })
+    },
     { 
       headerName: "티켓/레저 영업장", 
       filter: true, 
@@ -601,8 +651,51 @@ export default function DashboardPage() {
 
   const matrixRowData = useMemo(() => {
     const diffDays = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
-    return buildSegmentMatrix(mergeBreakdownData(apiResponse?.segmentBreakdown || []), diffDays, dynamicCapacities)
+    return buildSegmentMatrix(mergeBreakdownData(apiResponse?.roomMarketBreakdown || apiResponse?.segmentBreakdown || []), diffDays, dynamicCapacities)
   }, [apiResponse, startDate, endDate, dynamicCapacities])
+
+  const ticketGroups = useMemo(() => {
+    if (!apiResponse) return {};
+    
+    // (1) 이중 반복문 방지를 위해 사전을 만듭니다. O(1) 매칭
+    const productMap: Record<string, string> = {};
+    apiResponse.ticketSummary?.productLevelMapping?.forEach(item => {
+      if (item.ticketName) productMap[item.ticketName] = item.groupName;
+    });
+
+    const facilityMap: Record<string, string> = {};
+    apiResponse.ticketSummary?.facilityLevelMapping?.forEach(item => {
+      if (item.facilityName) facilityMap[item.facilityName] = item.groupName;
+    });
+
+    // (2) 화면에 그릴 최종 그룹들을 담을 바구니
+    const groupedResult: Record<string, any[]> = {};
+
+    const rawTickets = mergeBreakdownData((apiResponse as any)?.ticketFacilityBreakdown || []);
+
+    rawTickets.forEach((ticket: any) => {
+      const tName = ticket.shop_name || ticket.facility_name || ticket.name || "";
+      // 1순위: 티켓 이름(Product)으로 찾기
+      let groupName = productMap[tName];
+      
+      // 2순위: 시설 이름(Facility)으로 찾기
+      if (!groupName) {
+        groupName = facilityMap[tName];
+      }
+      
+      // 3순위: 그래도 없으면 미분류
+      if (!groupName) {
+        groupName = '미분류';
+      }
+
+      if (!groupedResult[groupName]) {
+        groupedResult[groupName] = [];
+      }
+      groupedResult[groupName].push(ticket);
+    });
+
+    return groupedResult;
+  }, [apiResponse]);
 
   const chartData = useMemo(() => {
     if (!apiResponse || !apiResponse.chartData) return []
@@ -1032,7 +1125,7 @@ export default function DashboardPage() {
         <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
               theme="legacy"
-            rowData={mergeBreakdownData((apiResponse as any)?.ticketFacilityBreakdown || [])}
+            rowData={ticketGroupsMappedData}
             columnDefs={ticketColDefs}
             defaultColDef={{ 
               resizable: true, 
