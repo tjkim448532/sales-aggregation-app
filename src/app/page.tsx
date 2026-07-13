@@ -61,8 +61,8 @@ export default function DashboardPage() {
   const pieChartData = useMemo(() => {
     if (!apiResponse?.salesByCategory) return []
     return apiResponse.salesByCategory.map(item => ({
-      name: item.category,
-      value: item.sales
+      name: item.category_name || item.category_code,
+      value: item.totalSales
     }))
   }, [apiResponse])
 
@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const availableTabs = useMemo(() => {
     const tabs = new Set<string>(["전체"])
     if (apiResponse?.salesByFacility) {
-      apiResponse.salesByFacility.forEach(item => tabs.add(item.categoryCode))
+      apiResponse.salesByFacility.forEach(item => tabs.add(item.category_code))
     }
     return Array.from(tabs)
   }, [apiResponse])
@@ -88,21 +88,20 @@ export default function DashboardPage() {
   const filteredFacilityData = useMemo(() => {
     if (!apiResponse?.salesByFacility) return []
     if (activeTab === "전체") return apiResponse.salesByFacility
-    return apiResponse.salesByFacility.filter(item => item.categoryCode === activeTab)
+    return apiResponse.salesByFacility.filter(item => item.category_code === activeTab)
   }, [apiResponse, activeTab])
 
   const facilityColDefs = useMemo<ColDef<any>[]>(() => [
-    { headerName: "대분류", field: "categoryCode", width: 120, cellStyle: { textAlign: 'center', fontWeight: 'bold' } as any },
-    { headerName: "영업장 (소분류)", field: "subGroupName", width: 200 },
+    { headerName: "대분류", field: "category_code", width: 120, cellStyle: { textAlign: 'center', fontWeight: 'bold' } as any },
+    { headerName: "영업장 (소분류)", field: "sub_group_name", width: 200 },
     { 
       headerName: "매출액", 
-      field: "totalSales", 
+      field: "total_sales", 
       width: 150, 
       cellStyle: { textAlign: 'right', color: '#10B981', fontWeight: 600 } as any,
       valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`
     },
-    { headerName: "수량 (Qty)", field: "qty", width: 100, cellStyle: { textAlign: 'right' } as any },
-    { headerName: "방문객", field: "visitors", width: 100, cellStyle: { textAlign: 'right' } as any }
+    { headerName: "방문객", field: "total_visitors", width: 100, cellStyle: { textAlign: 'right' } as any }
   ], [])
 
   // 3. 요일비교 매트릭스 그리드 설정
@@ -183,10 +182,10 @@ export default function DashboardPage() {
         <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
           <p className="text-sm font-semibold text-gray-400 mb-1">당일 총 매출</p>
           <div className="text-2xl font-black text-indigo-400">
-            {summary.totalRevenue.toLocaleString()} <span className="text-sm font-medium text-gray-500">원</span>
+            {Math.round(summary.totalRevenue).toLocaleString()} <span className="text-sm font-medium text-gray-500">원</span>
           </div>
           {summary.ytdRevenue ? (
-            <p className="text-xs text-gray-500 mt-2">YTD: {summary.ytdRevenue.toLocaleString()}원</p>
+            <p className="text-xs text-gray-500 mt-2">YTD: {Math.round(summary.ytdRevenue).toLocaleString()}원</p>
           ) : null}
         </div>
         <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">

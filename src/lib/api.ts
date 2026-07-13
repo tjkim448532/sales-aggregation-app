@@ -10,16 +10,16 @@ export interface DashboardSummary {
 }
 
 export interface DashboardCategorySales {
-  category: string;
-  sales: number;
+  category_code: string;
+  category_name: string;
+  totalSales: number;
 }
 
 export interface DashboardFacilitySales {
-  categoryCode: string;
-  subGroupName: string;
-  totalSales: number;
-  visitors?: number;
-  qty?: number;
+  category_code: string;
+  sub_group_name: string;
+  total_sales: number;
+  total_visitors?: number;
 }
 
 export interface DashboardDailyTrend {
@@ -116,7 +116,7 @@ export const fetchMatrixWeekly = async (date: string): Promise<MatrixWeeklyItem[
 
   const json = await response.json();
   
-  if (json && json.status === "SUCCESS" && json.data) {
+  if (json && (json.status === "SUCCESS" || json.success === true) && json.data) {
     return json.data as MatrixWeeklyItem[];
   }
   
