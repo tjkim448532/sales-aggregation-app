@@ -201,3 +201,56 @@ export const saveRoomBudgets = async (payload: RoomBudgetPayload): Promise<any> 
 
   return await response.json();
 };
+
+export interface SegmentRevenueItem {
+  segment: string;
+  roomType: string;
+  roomsSold: number;
+  revenue: number;
+  occ: number;
+  adr: number;
+  revenueShare: number;
+  targetPeriod: number;
+  actualPeriod: number;
+  achieveRatePeriod: number;
+  targetMtd: number;
+  actualMtd: number;
+  achieveRateMtd: number;
+  targetYtd: number;
+  actualYtd: number;
+  achieveRateYtd: number;
+  pyRevenue: number;
+  yoyGrowth: number;
+  isSubtotal: boolean;
+  isGrandTotal?: boolean;
+}
+
+export const fetchRevenueBySegment = async (startDate: string, endDate: string): Promise<SegmentRevenueItem[]> => {
+  const apiBase = getApiBase();
+  try {
+    const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-by-segment?startDate=${startDate}&endDate=${endDate}`, {
+      headers: {
+        'Authorization': 'Bearer belleforet-m2m-secret'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`[fetchRevenueBySegment] API error: ${response.status}`);
+      return [];
+    }
+
+    const json = await response.json();
+    if (json && json.success === true && json.data) {
+      return json.data as SegmentRevenueItem[];
+    }
+    
+    if (Array.isArray(json)) {
+      return json as SegmentRevenueItem[];
+    }
+
+    return [];
+  } catch (error) {
+    console.error(`[fetchRevenueBySegment] Network error:`, error);
+    return [];
+  }
+};
