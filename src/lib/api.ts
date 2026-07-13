@@ -1,92 +1,63 @@
-export interface DashboardGridDataItem {
-  depth1: string;
-  depth2: string;
-  depth3: string;
-  salesAmount: number;
-  quantity: number;
+export interface DashboardSummary {
+  totalRevenue: number;
+  totalRooms: number;
+  totalRoomCap: number;
+  totalGolfTeams: number;
+  totalGuests?: number;
+  mtdRevenue?: number;
+  ytdRevenue?: number;
+  todayLyRevenue?: number;
 }
 
-export interface DashboardChartDataItem {
-  name: string;
-  value: number;
+export interface DashboardCategorySales {
+  category: string;
+  sales: number;
 }
 
-export interface DashboardBreakdownItem {
-  category_code: string;
-  category_name: string;
-  shop_name?: string;
-  facility_name?: string;
-  revenue?: number;
-  today_actual: number;
-  today_ly: number;
-  mtd_actual: number;
-  mtd_ly: number;
-  ytd_actual: number;
-  ytd_ly: number;
-  
-  // Additional quantities
-  roomsSold?: number;
-  rooms_sold?: number;
-  rooms_sold_weighted?: number;
-  room_nights?: number;
+export interface DashboardFacilitySales {
+  categoryCode: string;
+  subGroupName: string;
+  totalSales: number;
   visitors?: number;
   qty?: number;
-  
-  // RateCode/Segment fields
-  rateCode?: string;
-  rate_code?: string;
-  segment?: string;
-  segment_name?: string;
-  channel_name?: string;
-  room_type?: string;
-  pyType?: string;
-  capacity?: number;
-  total_capacity?: number;
-  period_capacity?: number;
 }
 
-export type DashboardChannelBreakdownItem = DashboardBreakdownItem;
-export type DashboardRateCodeBreakdownItem = DashboardBreakdownItem;
+export interface DashboardDailyTrend {
+  date: string;
+  revenue: number;
+}
 
 export interface DashboardRevenueResponse {
-  startDate: string;
-  endDate: string;
-  date: string;
-  
-  // V5 properties (with ETL injected fields)
-  roomSummary?: { totalRoomRevenue: number; totalRoomsSold: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
-  golfSummary?: { totalGolfRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
-  ticketSummary?: { 
-    totalTicketRevenue: number; 
-    mtd_actual?: number; 
-    ytd_actual?: number; 
-    today_ly?: number; 
-    productLevelMapping?: { ticketName?: string; groupName: string }[];
-    facilityLevelMapping?: { facilityName?: string; groupName: string }[];
-    facilityBreakdown?: any[];
+  targetDate: string;
+  summary: DashboardSummary;
+  salesByCategory: DashboardCategorySales[];
+  salesByFacility: DashboardFacilitySales[];
+  dailyTrends: DashboardDailyTrend[];
+  roomSummaryByType?: { roomType: string; roomsSold: number; totalSales: number; capacity: number }[];
+  salesByChannel?: { channelName: string; roomsSold: number; totalSales: number }[];
+  dailyTrendsByCategory?: { date: string; category: string; revenue: number }[];
+  advancedRoomStats?: { dayOfWeekOccupancy: any; mixPercentage: any };
+  weather?: {
+    condition?: string;
+    tempMax?: number;
+    tempMin?: number;
   };
-  fnbSummary?: { totalFnbRevenue: number; mtd_actual?: number; ytd_actual?: number; today_ly?: number; };
+}
 
-  today?: { actual: number; ly_actual: number; gross?: number; vat?: number };
-  mtd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
-  ytd?: { actual: number; ly_actual: number; gross?: number; vat?: number };
-  
-  today_actual?: number;
-  revenue?: number;
-  today_ly?: number;
-  mtd_actual?: number;
-  mtd_ly?: number;
-  ytd_actual?: number;
-  ytd_ly?: number;
-
-  gridData: DashboardGridDataItem[];
-  chartData: DashboardChartDataItem[];
-  dailyReportBreakdown: DashboardBreakdownItem[];
-  segmentBreakdown: DashboardBreakdownItem[];
-  channelBreakdown: DashboardBreakdownItem[];
-  rateCodeBreakdown: DashboardBreakdownItem[];
-  roomTypeBreakdown?: DashboardBreakdownItem[];
-  roomMarketBreakdown?: DashboardBreakdownItem[];
+export interface MatrixWeeklyItem {
+  isSubtotal: boolean;
+  isGrandTotal?: boolean;
+  subtotalType?: "part" | "team" | "category" | "grand_total";
+  categoryCode: string;
+  categoryName: string;
+  teamName: string;
+  partName: string;
+  shopName: string;
+  todayActual: number;
+  todayLy?: number;
+  todayGrowth?: number;
+  mtdActual?: number;
+  ytdActual?: number;
 }
 
 export interface Targets {
@@ -96,16 +67,13 @@ export interface Targets {
 }
 
 const getApiBase = () => {
-  // Vercel 환경에서는 next.config.ts의 rewrites를 통한 프록시를 사용하여 CORS를 우회합니다.
   return "";
 };
 
-import { aggregateDateRangeData } from './dataNormaliser';
-
-export const fetchRevenueRange = async (startDate: string, endDate: string): Promise<any> => {
+export const fetchDailyRevenue = async (date: string): Promise<DashboardRevenueResponse | null> => {
   const apiBase = getApiBase();
 
-  const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-summary?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`, {
+  const response = await fetch(`${apiBase}/api/v5/dashboard/revenue-summary?date=${date}&_t=${Date.now()}`, {
     cache: "no-store",
     headers: {
       "Authorization": "Bearer mock_super_admin_token"
@@ -123,23 +91,41 @@ export const fetchRevenueRange = async (startDate: string, endDate: string): Pro
     throw new Error(`백엔드 오류 (${response.status}): ${errorDetail}`);
   }
 
-  return await response.json();
-};
-
-export const fetchDailyRevenue = async (startDate: string, endDate: string): Promise<DashboardRevenueResponse | null> => {
-  const json = await fetchRevenueRange(startDate, endDate);
-
-  // V5 API가 기간 검색 시 배열을 반환하는 경우 처리 (정규화 레이어)
-  if (Array.isArray(json) && json.length > 0) {
-    return aggregateDateRangeData(json) as DashboardRevenueResponse;
-  }
-
-  // V5 returns { success: true, data: { ... } }
-  if (json && json.success && json.data) {
+  const json = await response.json();
+  
+  if (json && json.status === "SUCCESS" && json.data) {
     return json.data as DashboardRevenueResponse;
   }
   
   return json as DashboardRevenueResponse;
+};
+
+export const fetchMatrixWeekly = async (date: string): Promise<MatrixWeeklyItem[]> => {
+  const apiBase = getApiBase();
+
+  const response = await fetch(`${apiBase}/api/v5/dashboard/matrix-weekly?date=${date}&_t=${Date.now()}`, {
+    cache: "no-store",
+    headers: {
+      "Authorization": "Bearer mock_super_admin_token"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`백엔드 매트릭스 API 오류 (${response.status})`);
+  }
+
+  const json = await response.json();
+  
+  if (json && json.status === "SUCCESS" && json.data) {
+    return json.data as MatrixWeeklyItem[];
+  }
+  
+  // Fallback to array if direct return
+  if (Array.isArray(json)) {
+    return json;
+  }
+  
+  return [];
 };
 
 export const fetchTargets = async (year: number, month: number): Promise<Targets> => {
@@ -154,7 +140,6 @@ export const fetchTargets = async (year: number, month: number): Promise<Targets
     console.error('Failed to fetch targets from internal API:', e);
   }
   
-  // 기본값 반환
   return {
     targetRn: 500,
     targetRev: 50000000,
@@ -181,45 +166,3 @@ export const saveTargets = async (payload: {
 
   return await res.json();
 };
-
-import { eachDayOfInterval, parseISO, format } from 'date-fns';
-
-export const fetchRevenueTrends = async (startDate: string, endDate: string) => {
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  
-  const days = eachDayOfInterval({ start, end });
-  
-  // V5 API 최적화: 날짜별로 수십 번 API를 호출하지 않고, 단 1번의 기간 조회로 전체 데이터를 가져옵니다.
-  let jsonArray: any = [];
-  try {
-    const rawData = await fetchRevenueRange(startDate, endDate);
-    if (Array.isArray(rawData)) {
-      jsonArray = rawData;
-    } else if (rawData && rawData.success && Array.isArray(rawData.data)) {
-      jsonArray = rawData.data;
-    } else if (rawData && rawData.data) {
-      jsonArray = [rawData.data];
-    }
-  } catch (e) {
-    console.error("Failed to fetch revenue trends:", e);
-  }
-  
-  return days.map(day => {
-    const formattedDate = format(day, 'yyyy-MM-dd');
-    // 가져온 원본 배열에서 해당 날짜의 데이터를 찾습니다.
-    const dayData = jsonArray.find((item: any) => {
-       const target = item.data || item;
-       return target.date === formattedDate;
-    });
-    
-    const targetData = dayData ? (dayData.data || dayData) : null;
-    
-    return {
-      date: formattedDate,
-      totalSales: targetData?.roomSummary?.totalRoomRevenue || targetData?.today_actual || targetData?.today?.actual || 0,
-      totalRooms: targetData?.roomSummary?.totalRoomsSold || 0,
-    };
-  });
-};
-

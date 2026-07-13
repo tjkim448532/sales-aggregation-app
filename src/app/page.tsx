@@ -1,193 +1,39 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { format, subDays } from "date-fns"
-import { Download, Search, RefreshCw, AlertCircle, Target, Info } from "lucide-react"
+import { RefreshCw, AlertCircle } from "lucide-react"
 import { AgGridReact } from "ag-grid-react"
-import { ColDef, ColGroupDef, ModuleRegistry, AllCommunityModule, ValidationModule } from "ag-grid-community"
+import { ColDef, RowClassParams, ModuleRegistry, AllCommunityModule } from "ag-grid-community"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-alpine.css"
-import { fetchDailyRevenue, type DashboardRevenueResponse, type DashboardBreakdownItem, fetchTargets } from "@/lib/api"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts"
-import DateRangePicker from "@/components/DateRangePicker"
-import rateCodesData from "@/data/rate_codes.json"
-import Link from "next/link"
-import { exportDashboardToExcel } from "@/lib/excelExport"
-import { mergeBreakdownData, buildHierarchicalRows, HierarchicalRow } from "@/lib/dataNormaliser"
+import { fetchDailyRevenue, fetchMatrixWeekly, type DashboardRevenueResponse, type MatrixWeeklyItem } from "@/lib/api"
+import { PieChart, Pie, Cell, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
-ModuleRegistry.registerModules([AllCommunityModule, ValidationModule])
-
-interface SegmentMatrixRow {
-  metric: string;
-  [key: string]: any;
-}
-
-// Helper to transform flat segmentBreakdown to pivoted matrix rows
-function buildSegmentMatrix(segmentBreakdown: any[], diffDays: number, capacities: { [key: string]: number }): SegmentMatrixRow[] {
-  const metrics = ["판매객실수(R/N)", "매출액", "객단가(ADR)", "가동률(OCC)"]
-  const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
-  const pyTypes = ["16PY", "35PY", "51PY", "기타"]
-
-  const cap16 = capacities["16PY"] || 90
-  const cap35 = capacities["35PY"] || 90
-  const totalCapacity = cap16 + cap35
-
-  // Initialize rows
-  const rows: SegmentMatrixRow[] = metrics.map(metric => ({ metric }))
-
-  const getRow = (m: string) => rows.find(r => r.metric === m)!
-
-  const cellRN: { [key: string]: number } = {}
-  const cellREV: { [key: string]: number } = {}
-
-  // 1. Loop through raw breakdown data to sum up roomsSold and revenue
-  if (Array.isArray(segmentBreakdown)) {
-    segmentBreakdown.forEach(item => {
-      const segNameRaw = item.channel_name || item.segment || item.segment_name || ""
-      const segName = segments.find(s => s === segNameRaw) || "기타"
-
-      // Normalize pyType
-      let py = item.pyType || item.room_type || item.shop_name || item.facility_name || ""
-      if (py.includes("16")) py = "16PY"
-      else if (py.includes("35")) py = "35PY"
-      else if (py.includes("51")) py = "51PY"
-      else py = "기타" // Unmapped types go to 기타 (ETC)
- 
-      const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
-      const rev = Number(item.today_actual || item.revenue || 0)
-
-      const cellKey = `${segName}_${py}`
-      cellRN[cellKey] = (cellRN[cellKey] || 0) + rn
-      cellREV[cellKey] = (cellREV[cellKey] || 0) + rev
-    })
-  }
-
-  // Populate segment cells and calculate subtotals
-  segments.forEach(seg => {
-    let segTotalRN = 0
-    let segTotalREV = 0
-
-    // Sum over ALL keys in cellRN/cellREV to avoid any leak
-    Object.keys(cellRN).forEach(key => {
-      if (key.startsWith(`${seg}_`)) {
-        segTotalRN += cellRN[key]
-      }
-    })
-    Object.keys(cellREV).forEach(key => {
-      if (key.startsWith(`${seg}_`)) {
-        segTotalREV += cellREV[key]
-      }
-    })
-
-    const rn16 = cellRN[`${seg}_16PY`] || 0
-    const rn35 = cellRN[`${seg}_35PY`] || 0
-    const rn51 = cellRN[`${seg}_51PY`] || 0
-
-    pyTypes.forEach(py => {
-      const cellKey = `${seg}_${py}`
-      const rn = cellRN[cellKey] || 0
-      const rev = cellREV[cellKey] || 0
-      
-      let adr = rn > 0 ? rev / rn : 0
-      
-      let occVal: any = 0
-      if (py === "16PY") {
-        occVal = cap16 > 0 ? ((rn16 + rn51) / cap16) * 100 : 0
-      } else if (py === "35PY") {
-        occVal = cap35 > 0 ? ((rn35 + rn51) / cap35) * 100 : 0
-      } else if (py === "51PY" || py === "기타") {
-        occVal = "-" // 51평 및 기타 객실 단독 가동률은 산출 불가(-) 처리
-      }
-
-      getRow("판매객실수(R/N)")[cellKey] = rn
-      getRow("매출액")[cellKey] = rev
-      getRow("객단가(ADR)")[cellKey] = adr
-      getRow("가동률(OCC)")[cellKey] = occVal
-    })
-
-    const subtotalKey = `${seg}_소계`
-    getRow("판매객실수(R/N)")[subtotalKey] = segTotalRN
-    getRow("매출액")[subtotalKey] = segTotalREV
-    getRow("객단가(ADR)")[subtotalKey] = segTotalRN > 0 ? segTotalREV / segTotalRN : 0
-    
-    // Subtotal OCC: rn51은 이미 x2 배 부풀려져 있으므로 곱하지 않고 그대로 더함
-    getRow("가동률(OCC)")[subtotalKey] = totalCapacity > 0 ? ((rn16 + rn35 + rn51) / totalCapacity) * 100 : 0
-  })
-
-  // Calculate overall totals (합계) for each pyType
-  let grandTotalRN = 0
-  let grandTotalREV = 0
-
-  pyTypes.forEach(py => {
-    let pyTotalRN = 0
-    let pyTotalREV = 0
-
-    segments.forEach(seg => {
-      const cellKey = `${seg}_${py}`
-      const rn = cellRN[cellKey] || 0
-      const rev = cellREV[cellKey] || 0
-
-      pyTotalRN += rn
-      pyTotalREV += rev
-    })
-
-    const totalKey = `합계_${py}`
-    getRow("판매객실수(R/N)")[totalKey] = pyTotalRN
-    getRow("매출액")[totalKey] = pyTotalREV
-    
-    let pyTotalAdr = pyTotalRN > 0 ? pyTotalREV / pyTotalRN : 0
-    getRow("객단가(ADR)")[totalKey] = pyTotalAdr
-    
-    let pyOccVal: any = 0
-    if (py === "16PY") {
-      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap16 > 0 ? ((pyTotalRN + totalRN51) / cap16) * 100 : 0
-    } else if (py === "35PY") {
-      const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-      pyOccVal = cap35 > 0 ? ((pyTotalRN + totalRN51) / cap35) * 100 : 0
-    } else if (py === "51PY" || py === "기타") {
-      pyOccVal = "-"
-    }
-    getRow("가동률(OCC)")[totalKey] = pyOccVal
-
-    grandTotalRN += pyTotalRN
-    grandTotalREV += pyTotalREV
-  })
-
-  const totalRN16 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_16PY`] || 0), 0)
-  const totalRN35 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_35PY`] || 0), 0)
-  const totalRN51 = segments.reduce((sum, seg) => sum + (cellRN[`${seg}_51PY`] || 0), 0)
-
-  const grandKey = "합계_총계"
-  getRow("판매객실수(R/N)")[grandKey] = grandTotalRN
-  getRow("매출액")[grandKey] = grandTotalREV
-  getRow("객단가(ADR)")[grandKey] = grandTotalRN > 0 ? grandTotalREV / grandTotalRN : 0
-  getRow("가동률(OCC)")[grandKey] = totalCapacity > 0 ? ((totalRN16 + totalRN35 + totalRN51) / totalCapacity) * 100 : 0
-
-  return rows;
-}
+ModuleRegistry.registerModules([AllCommunityModule])
 
 export default function DashboardPage() {
-  const [startDate, setStartDate] = useState<string>("2026-06-01")
-  const [endDate, setEndDate] = useState<string>("2026-06-30")
+  const [targetDate, setTargetDate] = useState<string>("2026-07-09")
   const [apiResponse, setApiResponse] = useState<DashboardRevenueResponse | null>(null)
+  const [matrixData, setMatrixData] = useState<MatrixWeeklyItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
-  const [matrixGridApi, setMatrixGridApi] = useState<any>(null)
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
-  
-  const [targetConfig, setTargetConfig] = useState<any>({ targetRn: 0, targetRev: 0, targetOcc: 0 })
+  const [activeTab, setActiveTab] = useState("전체")
 
   const loadData = async () => {
     setIsLoading(true)
     setError("")
     try {
-      const result = await fetchDailyRevenue(startDate, endDate)
-      setApiResponse(result)
+      const [revResult, matrixResult] = await Promise.all([
+        fetchDailyRevenue(targetDate),
+        fetchMatrixWeekly(targetDate)
+      ]);
+      setApiResponse(revResult)
+      setMatrixData(matrixResult || [])
     } catch (err: any) {
       console.error("Failed to fetch data:", err)
       setError(err.message || "데이터를 불러오는 중 오류가 발생했습니다.")
       setApiResponse(null)
+      setMatrixData([])
     } finally {
       setIsLoading(false)
     }
@@ -195,1050 +41,296 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData()
-  }, [startDate, endDate])
+  }, [targetDate])
 
-  useEffect(() => {
-    const loadTargetConfig = async () => {
-      try {
-        const parts = endDate.split("-")
-        const year = parseInt(parts[0])
-        const month = parseInt(parts[1])
-        const data = await fetchTargets(year, month)
-        if (data) {
-          setTargetConfig(data)
-        }
-      } catch (e) {
-        console.error("Failed to fetch targets:", e)
-      }
-    }
-    loadTargetConfig()
-  }, [endDate])
-
-  const diffDays = useMemo(() => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    const diffTime = Math.abs(end.getTime() - start.getTime())
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-  }, [startDate, endDate])
-
-  const dynamicCapacities = useMemo(() => {
-    const caps = { "16PY": 90 * diffDays, "35PY": 90 * diffDays, "51PY": 0 }
-    if (apiResponse && Array.isArray(apiResponse.roomTypeBreakdown)) {
-      apiResponse.roomTypeBreakdown.forEach((item: any) => {
-        const name = item.room_type || item.shop_name || item.facility_name || ""
-        const cap = Number(item.capacity || item.total_capacity || 0)
-        if (name.includes("16")) {
-          caps["16PY"] = cap
-        } else if (name.includes("35")) {
-          caps["35PY"] = cap
-        } else if (name.includes("51")) {
-          caps["51PY"] = cap
-        }
-      })
-    }
-    return caps
-  }, [apiResponse, diffDays])
-
-  const periodRoomsSold = useMemo(() => {
-    let sold16 = 0
-    let sold35 = 0
-    let sold51 = 0
-    let soldEtc = 0
-
-    if (apiResponse && Array.isArray(apiResponse.segmentBreakdown)) {
-      apiResponse.segmentBreakdown.forEach(item => {
-        let py = item.pyType || item.room_type || item.shop_name || item.facility_name || ""
-        const rn = Number(item.roomsSold || item.rooms_sold_weighted || item.room_nights || item.rooms_sold || 0)
-        
-        if (py.includes("16")) sold16 += rn
-        else if (py.includes("35")) sold35 += rn
-        else if (py.includes("51")) sold51 += rn
-        else soldEtc += rn
-      })
-    }
-
-    return { sold16, sold35, sold51, soldEtc }
-  }, [apiResponse])
-
-  const actualRn = useMemo(() => {
-    return apiResponse?.roomSummary?.totalRoomsSold || 0;
-  }, [apiResponse])
-
-  const actualRev = useMemo(() => {
-    return apiResponse?.roomSummary?.totalRoomRevenue || 0;
-  }, [apiResponse])
-
-  const totalToday = useMemo(() => {
-    return (apiResponse?.roomSummary?.totalRoomRevenue || 0) +
-           (apiResponse?.golfSummary?.totalGolfRevenue || 0) +
-           (apiResponse?.ticketSummary?.totalTicketRevenue || 0) +
-           (apiResponse?.fnbSummary?.totalFnbRevenue || 0);
-  }, [apiResponse]);
-
-  const totalTodayLy = useMemo(() => {
-    return (apiResponse?.roomSummary?.today_ly || 0) +
-           (apiResponse?.golfSummary?.today_ly || 0) +
-           (apiResponse?.ticketSummary?.today_ly || 0) +
-           (apiResponse?.fnbSummary?.today_ly || 0);
-  }, [apiResponse]);
-
-  const totalMtd = useMemo(() => {
-    return (apiResponse?.roomSummary?.mtd_actual || 0) +
-           (apiResponse?.golfSummary?.mtd_actual || 0) +
-           (apiResponse?.ticketSummary?.mtd_actual || 0) +
-           (apiResponse?.fnbSummary?.mtd_actual || 0);
-  }, [apiResponse]);
-
-  const totalYtd = useMemo(() => {
-    return (apiResponse?.roomSummary?.ytd_actual || 0) +
-           (apiResponse?.golfSummary?.ytd_actual || 0) +
-           (apiResponse?.ticketSummary?.ytd_actual || 0) +
-           (apiResponse?.fnbSummary?.ytd_actual || 0);
-  }, [apiResponse]);
-
-  const actualOcc = useMemo(() => {
-    const cap16 = dynamicCapacities["16PY"] || 90 * diffDays
-    const cap35 = dynamicCapacities["35PY"] || 90 * diffDays
-    const totalCap = cap16 + cap35
-
-    if (totalCap === 0) return 0
-    return (actualRn / totalCap) * 100
-  }, [actualRn, dynamicCapacities, diffDays])
-
-  const exportToExcel = async () => {
-    try {
-      await exportDashboardToExcel(apiResponse, startDate, endDate, targetConfig)
-    } catch (e) {
-      console.error("Excel export error:", e)
-      alert("엑셀 다운로드 중 오류가 발생했습니다.")
-    }
+  // ==========================================
+  // SSOT 원칙 적용: 임의의 연산/합산을 일절 하지 않음
+  // ==========================================
+  const summary = apiResponse?.summary || {
+    totalRevenue: 0,
+    totalRooms: 0,
+    totalRoomCap: 0,
+    totalGolfTeams: 0,
+    mtdRevenue: 0,
+    ytdRevenue: 0,
+    todayLyRevenue: 0,
+    totalGuests: 0
   }
 
-  // Format values for the Facility Detail Grid
-  const formatVal = (val: any, name: string) => {
-    if (val === undefined || val === null || val === "") return "-"
-    const num = Number(val)
-    if (isNaN(num)) return val
-
-    if (name === "Occupied Rooms" || name === "Rooms Sold") {
-      return Math.round(num).toLocaleString()
-    }
-    
-    // 1000단위 미만 절사 (천원 단위 표기, ₩ 기호 제거)
-    const thousandVal = Math.round(num / 1000)
-    return thousandVal.toLocaleString()
-  }
-
-  // Format values for the Matrix Grid
-  const formatMatrixVal = (val: any, metric: string) => {
-    if (val === undefined || val === null || val === "") return "-"
-    const num = Number(val)
-    if (isNaN(num)) return val
-
-    if (metric === "판매객실수(R/N)") {
-      return Math.round(num).toLocaleString()
-    }
-    if (metric === "매출액" || metric === "객단가(ADR)") {
-      // 1000단위 미만 절사 (천원 단위 표기, ₩ 기호 제거)
-      const thousandVal = Math.round(num / 1000)
-      return thousandVal.toLocaleString()
-    }
-    if (metric === "가동률(OCC)") {
-      // DB에서 이미 퍼센트값(예: 4.2 -> 4.2%)으로 리턴되므로 곱하기 100 없이 직접 소수점 포맷팅만 수행
-      return `${num.toFixed(1)}%`
-    }
-    return val
-  }
-
-  // Segment PY Matrix Column Definitions
-  const matrixColDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
-    const segments = ["분양회원", "자사채널", "MICE", "OTA", "법인", "제휴&기타", "기타"]
-    const pyTypes = ["16PY", "35PY", "51PY", "기타"]
-
-    const cols: (ColDef | ColGroupDef)[] = [
-      { 
-        field: "metric", 
-        headerName: "지표", 
-        pinned: "left", 
-        width: 140,
-        wrapText: true,
-        autoHeight: true,
-        cellStyle: { fontWeight: 'bold', textAlign: 'center', borderRight: '2px solid #d1d5db', whiteSpace: 'normal', lineHeight: '1.4' }
-      }
-    ]
-
-    // 합계 Group
-    cols.push({
-      headerName: "합계",
-      children: [
-        { 
-          field: "합계_16PY", 
-          headerName: "16PY", 
-          width: 110,
-          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-        },
-        { 
-          field: "합계_35PY", 
-          headerName: "35PY", 
-          width: 110,
-          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-        },
-        { 
-          field: "합계_51PY", 
-          headerName: "51PY", 
-          width: 110,
-          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-        },
-        { 
-          field: "합계_기타", 
-          headerName: "기타", 
-          width: 110,
-          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-        },
-        { 
-          field: "합계_총계", 
-          headerName: "총계", 
-          width: 130,
-          cellStyle: { fontWeight: 'bold', borderRight: '3px solid #374151', textAlign: 'center' },
-          valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-        }
-      ]
-    })
-
-    // Segments Group
-    segments.forEach(seg => {
-      cols.push({
-        headerName: seg,
-        children: [
-          { 
-            field: `${seg}_16PY`, 
-            headerName: "16PY", 
-            width: 110,
-            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-          },
-          { 
-            field: `${seg}_35PY`, 
-            headerName: "35PY", 
-            width: 110,
-            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-          },
-          { 
-            field: `${seg}_51PY`, 
-            headerName: "51PY", 
-            width: 110,
-            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-          },
-          { 
-            field: `${seg}_기타`, 
-            headerName: "기타", 
-            width: 110,
-            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-          },
-          { 
-            field: `${seg}_소계`, 
-            headerName: "소계", 
-            width: 120,
-            cellStyle: { fontWeight: 'bold', borderRight: '2px solid #9ca3af', textAlign: 'center' },
-            valueFormatter: (p) => formatMatrixVal(p.value, p.data?.metric || "")
-          }
-        ]
-      })
-    })
-
-    return cols
-  }, [])
-
-  // V5 Room Market Breakdown Column Definitions
-  const roomMarketColDefs = useMemo<ColDef<DashboardBreakdownItem>[]>(() => [
-    { 
-      headerName: "객실 평수", 
-      field: "facility_name", 
-      filter: true, 
-      sortable: true, 
-      width: 150, 
-      cellStyle: { textAlign: 'center', fontWeight: 'bold' } as any
-    },
-    { 
-      headerName: "마켓 채널", 
-      field: "channel_name", 
-      filter: true, 
-      sortable: true, 
-      width: 200, 
-      cellStyle: { textAlign: 'left' } as any
-    },
-    { 
-      headerName: "판매객실수", 
-      field: "rooms_sold", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 140, 
-      valueFormatter: (p) => formatVal(p.value, "Rooms Sold") 
-    },
-    { 
-      headerName: "매출", 
-      field: "today_actual", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 150, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    }
-  ], [])
-
-  // Channel Detail Column Definitions
-
-  const channelColDefs = useMemo<ColDef<DashboardBreakdownItem>[]>(() => [
-    { 
-      headerName: "채널명", 
-      filter: true, 
-      sortable: true, 
-      width: 220, 
-      cellStyle: { textAlign: 'left' },
-      valueGetter: (p) => p.data?.shop_name || p.data?.facility_name || "" 
-    },
-    { 
-      field: "today_actual", 
-      headerName: "금일 실적", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 150, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    },
-    { 
-      field: "today_ly", 
-      headerName: "금일 전년", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 150, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    },
-    { 
-      field: "mtd_actual", 
-      headerName: "당월 누적 (MTD)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 170, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    },
-    { 
-      field: "mtd_ly", 
-      headerName: "당월 전년 (MTD LY)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 170, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    },
-    { 
-      field: "ytd_actual", 
-      headerName: "연간 누적 (YTD)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 180, 
-      valueFormatter: (p) => formatVal(p.value, "Revenue") 
-    },
-    { 
-      field: "ytd_ly", 
-      headerName: "연간 전년 (YTD LY)", 
-      filter: "agNumberColumnFilter", 
-      sortable: true, 
-      width: 180, 
-      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}` 
-    }
-  ], [])
-
-  const ticketGroupsMappedData = useMemo(() => {
-    if (!apiResponse) return []
-    
-    // (1) 이중 반복문 방지를 위해 사전을 만듭니다. O(1) 매칭
-    const productMap: Record<string, string> = {}
-    if (apiResponse.ticketSummary?.productLevelMapping) {
-      apiResponse.ticketSummary.productLevelMapping.forEach((item: any) => {
-        productMap[item.ticketName] = item.groupName
-      })
-    }
-
-    const facilityMap: Record<string, string> = {}
-    if (apiResponse.ticketSummary?.facilityLevelMapping) {
-      apiResponse.ticketSummary.facilityLevelMapping.forEach((item: any) => {
-        facilityMap[item.facilityName] = item.groupName
-      })
-    }
-
-    // (2) 병합된 원본 배열
-    const merged = mergeBreakdownData((apiResponse as any).ticketFacilityBreakdown || [])
-    
-    return merged.map(ticket => {
-      const t = ticket as any
-      const ticketName = t.ticketName || t.name || t.shop_name || t.facility_name || ""
-      const facilityName = t.facility_name || t.shop_name || ""
-      
-      // 1순위: 티켓 이름(Product)으로 찾기
-      let groupName = productMap[ticketName]
-      
-      // 2순위: 시설 이름(Facility)으로 찾기
-      if (!groupName) {
-        groupName = facilityMap[facilityName]
-      }
-      
-      // 3순위: 그래도 없으면 미분류
-      if (!groupName) {
-        groupName = '미분류'
-      }
-
-      return {
-        ...t,
-        groupName
-      }
-    })
-  }, [apiResponse])
-
-  const ticketColDefs = useMemo<ColDef<any>[]>(() => [
-    { 
-      headerName: "그룹명", 
-      field: "groupName", 
-      filter: true, 
-      sortable: true, 
-      width: 120, 
-      cellStyle: (params) => ({ 
-        textAlign: 'center', 
-        fontWeight: 'bold',
-        color: params.value === '미분류' ? '#EF4444' : '#F59E0B'
-      })
-    },
-    { 
-      headerName: "티켓/레저 영업장", 
-      filter: true, 
-      sortable: true, 
-      width: 220, 
-      cellStyle: { textAlign: 'left' },
-      valueGetter: (p) => p.data?.shop_name || p.data?.facility_name || "" 
-    },
-    { 
-      headerName: "당일 매출 (Net)", 
-      field: "today_actual", 
-      sortable: true, 
-      valueFormatter: (p) => `${Number(p.value || p.data?.revenue || 0).toLocaleString()}원`,
-      cellStyle: { textAlign: 'right', color: '#10B981', fontWeight: 600 } as any
-    },
-    { 
-      headerName: "당일 수량 (Qty)", 
-      field: "qty", 
-      sortable: true, 
-      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}`,
-      cellStyle: { textAlign: 'right', color: '#818CF8' } as any
-    },
-    { 
-      headerName: "방문객 수 (Visitors)", 
-      field: "visitors", 
-      sortable: true, 
-      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}`,
-      cellStyle: { textAlign: 'right', color: '#FBBF24' } as any
-    },
-    { 
-      headerName: "MTD 누계", 
-      field: "mtd_actual", 
-      sortable: true, 
-      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`,
-      cellStyle: { textAlign: 'right' }
-    },
-    { 
-      headerName: "YTD 누계", 
-      field: "ytd_actual", 
-      sortable: true, 
-      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`,
-      cellStyle: { textAlign: 'right' }
-    }
-  ], [])
-
-  const matrixRowData = useMemo(() => {
-    const diffDays = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
-    return buildSegmentMatrix(mergeBreakdownData(apiResponse?.roomMarketBreakdown || apiResponse?.segmentBreakdown || []), diffDays, dynamicCapacities)
-  }, [apiResponse, startDate, endDate, dynamicCapacities])
-
-  const ticketGroups = useMemo(() => {
-    if (!apiResponse) return {};
-    
-    // (1) 이중 반복문 방지를 위해 사전을 만듭니다. O(1) 매칭
-    const productMap: Record<string, string> = {};
-    apiResponse.ticketSummary?.productLevelMapping?.forEach(item => {
-      if (item.ticketName) productMap[item.ticketName] = item.groupName;
-    });
-
-    const facilityMap: Record<string, string> = {};
-    apiResponse.ticketSummary?.facilityLevelMapping?.forEach(item => {
-      if (item.facilityName) facilityMap[item.facilityName] = item.groupName;
-    });
-
-    // (2) 화면에 그릴 최종 그룹들을 담을 바구니
-    const groupedResult: Record<string, any[]> = {};
-
-    const rawTickets = mergeBreakdownData((apiResponse as any)?.ticketFacilityBreakdown || []);
-
-    rawTickets.forEach((ticket: any) => {
-      const tName = ticket.shop_name || ticket.facility_name || ticket.name || "";
-      // 1순위: 티켓 이름(Product)으로 찾기
-      let groupName = productMap[tName];
-      
-      // 2순위: 시설 이름(Facility)으로 찾기
-      if (!groupName) {
-        groupName = facilityMap[tName];
-      }
-      
-      // 3순위: 그래도 없으면 미분류
-      if (!groupName) {
-        groupName = '미분류';
-      }
-
-      if (!groupedResult[groupName]) {
-        groupedResult[groupName] = [];
-      }
-      groupedResult[groupName].push(ticket);
-    });
-
-    return groupedResult;
-  }, [apiResponse]);
-
-  const chartData = useMemo(() => {
-    if (!apiResponse || !apiResponse.chartData) return []
-    // 백엔드가 제공하는 chartData를 그대로 사용하되, 단위만 천원으로 조정 (선택 사항)
-    return apiResponse.chartData.map(item => ({
-      name: item.name || "",
-      value: Math.round(Number(item.value || 0) / 1000)
-    }))
-  }, [apiResponse])
-
-  const CHANNEL_ENUM: Record<string, string> = {
-    '기업영업(휴양소)': '휴양소',
-    '네이버휴양소': '휴양소',
-    '우리은행휴양소': '휴양소',
-    '온라인 여행사(자동)': '온라인',
-    '야놀자': '온라인',
-    '단체영업(세미나)': '단체영업'
-  };
-
-  const normalizeMarketType = (marketName?: string) => {
-    if (!marketName) return '기타';
-    if (CHANNEL_ENUM[marketName]) {
-      return CHANNEL_ENUM[marketName]; 
-    }
-    return marketName; // 사전에 없는 것은 원본 이름 유지
-  };
-
+  // 1. 차트 데이터 가공 (단순 매핑)
   const pieChartData = useMemo(() => {
-    if (!apiResponse || !Array.isArray(apiResponse.roomMarketBreakdown)) return []
-    const map = new Map<string, number>()
-    apiResponse.roomMarketBreakdown.forEach(item => {
-      const channel = normalizeMarketType(item.channel_name)
-      const current = map.get(channel) || 0
-      map.set(channel, current + Number(item.today_actual || 0))
-    })
-    
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
+    if (!apiResponse?.salesByCategory) return []
+    return apiResponse.salesByCategory.map(item => ({
+      name: item.category,
+      value: item.sales
+    }))
   }, [apiResponse])
 
   const PIE_COLORS = ['#4f46e5', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316'];
 
-  const rateCodeMap = useMemo(() => {
-    const map: { [key: string]: { roomsSold: number; revenue: number } } = {}
-    if (apiResponse && Array.isArray(apiResponse.rateCodeBreakdown)) {
-      apiResponse.rateCodeBreakdown.forEach((item: DashboardBreakdownItem) => {
-        const code = item.rateCode || "UNKNOWN"
-        map[code] = {
-          roomsSold: Number(item.roomsSold || item.rooms_sold_weighted || 0),
-          revenue: Number(item.today_actual || item.revenue || 0)
-        }
-      })
-    }
-    return map
+  const lineChartData = useMemo(() => {
+    if (!apiResponse?.dailyTrends) return []
+    return apiResponse.dailyTrends.map(item => ({
+      date: item.date,
+      revenue: Math.round(item.revenue / 10000) // 만원 단위 표출
+    }))
   }, [apiResponse])
 
-  const toggleCategory = (code: string) => {
-    setExpandedCategories(prev => ({ ...prev, [code]: !prev[code] }));
+  // 2. 동적 탭 및 그리드 데이터 (camelCase 준수)
+  const availableTabs = useMemo(() => {
+    const tabs = new Set<string>(["전체"])
+    if (apiResponse?.salesByFacility) {
+      apiResponse.salesByFacility.forEach(item => tabs.add(item.categoryCode))
+    }
+    return Array.from(tabs)
+  }, [apiResponse])
+
+  const filteredFacilityData = useMemo(() => {
+    if (!apiResponse?.salesByFacility) return []
+    if (activeTab === "전체") return apiResponse.salesByFacility
+    return apiResponse.salesByFacility.filter(item => item.categoryCode === activeTab)
+  }, [apiResponse, activeTab])
+
+  const facilityColDefs = useMemo<ColDef<any>[]>(() => [
+    { headerName: "대분류", field: "categoryCode", width: 120, cellStyle: { textAlign: 'center', fontWeight: 'bold' } as any },
+    { headerName: "영업장 (소분류)", field: "subGroupName", width: 200 },
+    { 
+      headerName: "매출액", 
+      field: "totalSales", 
+      width: 150, 
+      cellStyle: { textAlign: 'right', color: '#10B981', fontWeight: 600 } as any,
+      valueFormatter: (p) => `${Number(p.value || 0).toLocaleString()}원`
+    },
+    { headerName: "수량 (Qty)", field: "qty", width: 100, cellStyle: { textAlign: 'right' } as any },
+    { headerName: "방문객", field: "visitors", width: 100, cellStyle: { textAlign: 'right' } as any }
+  ], [])
+
+  // 3. 요일비교 매트릭스 그리드 설정
+  const matrixColDefs = useMemo<ColDef<MatrixWeeklyItem>[]>(() => [
+    { headerName: "카테고리", field: "categoryName", width: 120 },
+    { headerName: "본부/팀", field: "teamName", width: 130 },
+    { headerName: "파트", field: "partName", width: 120 },
+    { headerName: "영업장", field: "shopName", width: 180 },
+    { 
+      headerName: "당일 매출", 
+      field: "todayActual", 
+      width: 140, 
+      cellStyle: { textAlign: 'right', fontWeight: 600 } as any,
+      valueFormatter: (p) => p.value != null ? `${Number(p.value).toLocaleString()}원` : '-'
+    },
+    { 
+      headerName: "전년 동기", 
+      field: "todayLy", 
+      width: 140, 
+      cellStyle: { textAlign: 'right' } as any,
+      valueFormatter: (p) => p.value != null ? `${Number(p.value).toLocaleString()}원` : '-'
+    }
+  ], [])
+
+  // 소계/합계 행 스타일링 (AgGrid)
+  const getRowStyle = (params: RowClassParams<MatrixWeeklyItem>): any => {
+    if (params.data?.isGrandTotal) {
+      return { background: '#1e3a8a', color: '#fff', fontWeight: 'bold' }; // 진한 파란색
+    }
+    if (params.data?.isSubtotal) {
+      return { background: '#374151', fontWeight: 'bold' }; // 회색
+    }
+    return undefined;
   };
 
-  const dailyReportRowData = useMemo(() => {
-    return buildHierarchicalRows(apiResponse?.dailyReportBreakdown || [], expandedCategories);
-  }, [apiResponse, expandedCategories]);
-
-  const dailyReportColDefs = useMemo<ColDef<HierarchicalRow>[]>(() => [
-    {
-      headerName: "카테고리 / 영업장",
-      field: "categoryLabel",
-      width: 250,
-      cellStyle: { textAlign: 'left' },
-      cellRenderer: (p: any) => {
-        const data = p.data as HierarchicalRow;
-        if (data.isFooter) {
-          return <strong className="text-white text-base font-bold">{data.categoryLabel}</strong>;
-        }
-        if (data.isGroup) {
-          return (
-            <div 
-              className="flex items-center font-bold text-gray-100 cursor-pointer select-none" 
-              onClick={() => toggleCategory(data.category_code!)}
-            >
-              <span className="mr-2 inline-block w-4 text-center text-xs text-indigo-400">{data.expanded ? '▼' : '▶'}</span>
-              {data.categoryLabel}
-            </div>
-          );
-        }
-        return <div className="pl-6 text-gray-300">{data.shop_name || data.facility_name || (data as any).name}</div>;
-      }
-    },
-    { field: "today_actual", headerName: "금일 실적", filter: "agNumberColumnFilter", sortable: true, width: 140, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-    { field: "today_ly", headerName: "금일 전년", filter: "agNumberColumnFilter", sortable: true, width: 140, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-    { field: "mtd_actual", headerName: "MTD 실적", filter: "agNumberColumnFilter", sortable: true, width: 150, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-    { field: "mtd_ly", headerName: "MTD 전년", filter: "agNumberColumnFilter", sortable: true, width: 150, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-    { field: "ytd_actual", headerName: "YTD 실적", filter: "agNumberColumnFilter", sortable: true, width: 160, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-    { field: "ytd_ly", headerName: "YTD 전년", filter: "agNumberColumnFilter", sortable: true, width: 160, valueFormatter: (p) => formatVal(p.value, "Revenue") },
-  ], []);
-
   return (
-    <div className="space-y-8 flex flex-col h-full">
-      {/* Header Actions */}
-      <div className="relative z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
+    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans p-6">
+      {/* HEADER */}
+      <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">유형별 매출 현황</h1>
-          <p className="text-sm text-gray-400 mt-1">지정된 기간 동안의 세그먼트별 및 부서별 실적을 집계합니다.</p>
+          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            <span className="text-indigo-500">통합 데이터센터 V5 (v3.0)</span> 대시보드
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">SSOT (Single Source of Truth) 원칙 적용 렌더링</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <DateRangePicker 
-            startDate={startDate} 
-            endDate={endDate} 
-            onChange={(start, end) => {
-              setStartDate(start)
-              setEndDate(end)
-            }} 
-          />
-          
+          <div className="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
+            <label className="text-sm text-gray-300 font-semibold pl-2">기준 일자:</label>
+            <input 
+              type="date" 
+              className="bg-gray-900 border border-gray-600 rounded px-3 py-1 text-white outline-none focus:border-indigo-500"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+            />
+          </div>
+
           <button 
             onClick={loadData}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all disabled:opacity-50"
           >
-            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-            <span>조회</span>
-          </button>
-          
-          <button 
-            onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg border border-gray-700 transition-colors"
-          >
-            <Download size={16} />
-            <span>엑셀 다운로드</span>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            조회
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Error Message */}
       {error && (
-        <div className="flex items-center gap-3 bg-red-900/20 border border-red-800 p-4 rounded-xl text-red-400">
-          <AlertCircle size={20} />
-          <div>
-            <p className="font-semibold">데이터 연동 실패</p>
-            <p className="text-sm opacity-90">{error}</p>
-          </div>
+        <div className="mb-6 bg-red-900/30 border border-red-500/50 p-4 rounded-xl flex items-center gap-3 text-red-200">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{error}</p>
         </div>
       )}
 
-      {/* KPI Dashboard Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">선택 기간 실제 매출</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{totalToday.toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{totalTodayLy.toLocaleString()}</p>
-        </div>
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider">당월 누적 매출 (MTD)</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{totalMtd.toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.mtd_ly ?? apiResponse?.mtd?.ly_actual ?? 0).toLocaleString()}</p>
-        </div>
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md">
-          <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">연간 누적 매출 (YTD)</h4>
-          <p className="text-2xl font-bold text-white mt-2">₩{totalYtd.toLocaleString()}</p>
-          <p className="text-xs text-gray-400 mt-1">전년 동기: ₩{(apiResponse?.ytd_ly ?? apiResponse?.ytd?.ly_actual ?? 0).toLocaleString()}</p>
-        </div>
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800 backdrop-blur-md flex flex-col justify-center">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회 범위 기준 데이터 일자</h4>
-          <p className="text-lg font-bold text-indigo-300 mt-2">
-            {apiResponse?.date ? format(parseISO(apiResponse.date), "yyyy년 MM월 dd일") : "날짜 지정 대기"}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">조회기간: {startDate} ~ {endDate}</p>
-        </div>
-      </div>
-
-      {/* Target vs Actual (목표 대비 실적 현황) */}
-      {targetConfig && (
-        <div className="bg-gray-900/70 p-5 rounded-xl border border-gray-700/60 backdrop-blur-md space-y-4 shadow-lg">
-          <div className="flex justify-between items-center border-b border-gray-800/80 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-gray-100 flex items-center gap-2">
-                <Target size={16} className="text-indigo-400" />
-                <span>당월 목표 대비 실적 분석 ({endDate.split("-")[0]}년 {parseInt(endDate.split("-")[1])}월 기준)</span>
-              </h3>
-              <p className="text-xs text-gray-400 mt-0.5">설정된 목표치와 당월 누적 실적(MTD)을 비교합니다.</p>
-            </div>
-            <Link 
-              href="/targets" 
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition-colors"
-            >
-              <span>목표 설정하러 가기</span>
-              <span>&rarr;</span>
-            </Link>
+      {/* SUMMARY CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
+          <p className="text-sm font-semibold text-gray-400 mb-1">당일 총 매출</p>
+          <div className="text-2xl font-black text-indigo-400">
+            {summary.totalRevenue.toLocaleString()} <span className="text-sm font-medium text-gray-500">원</span>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 1. 객실 판매량 (R/N) */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-300">판매 객실 수 (R/N)</span>
-                <span className="text-indigo-400 font-bold">
-                  달성률 {targetConfig.targetRn > 0 ? ((actualRn / targetConfig.targetRn) * 100).toFixed(1) : 0}%
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-bold text-white">{actualRn.toLocaleString()}</span>
-                <span className="text-xs text-gray-400">/ {targetConfig.targetRn.toLocaleString()} R/N</span>
-              </div>
-              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
-                <div 
-                  className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, targetConfig.targetRn > 0 ? (actualRn / targetConfig.targetRn) * 100 : 0)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* 2. 매출액 */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-300">매출액 (Net)</span>
-                <span className="text-emerald-400 font-bold">
-                  달성률 {targetConfig.targetRev > 0 ? ((actualRev / targetConfig.targetRev) * 100).toFixed(1) : 0}%
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-bold text-white">₩{Math.round(actualRev / 1000).toLocaleString()}</span>
-                <span className="text-xs text-gray-400">/ ₩{Math.round(targetConfig.targetRev / 1000).toLocaleString()} (천원)</span>
-              </div>
-              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
-                <div 
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, targetConfig.targetRev > 0 ? (actualRev / targetConfig.targetRev) * 100 : 0)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* 3. 객실 가동률 (OCC) */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-gray-300">객실 가동률 (OCC)</span>
-                <span className="text-amber-400 font-bold">
-                  달성률 {targetConfig.targetOcc > 0 ? ((actualOcc / targetConfig.targetOcc) * 100).toFixed(1) : 0}%
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-bold text-white">{actualOcc.toFixed(1)}%</span>
-                <span className="text-xs text-gray-400">/ {targetConfig.targetOcc}%</span>
-              </div>
-              <div className="w-full bg-gray-950 rounded-full h-2.5 overflow-hidden border border-gray-800">
-                <div 
-                  className="bg-amber-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, targetConfig.targetOcc > 0 ? (actualOcc / targetConfig.targetOcc) * 100 : 0)}%` }}
-                />
-              </div>
-            </div>
+          {summary.ytdRevenue ? (
+            <p className="text-xs text-gray-500 mt-2">YTD: {summary.ytdRevenue.toLocaleString()}원</p>
+          ) : null}
+        </div>
+        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
+          <p className="text-sm font-semibold text-gray-400 mb-1">판매 객실 수</p>
+          <div className="text-2xl font-black text-pink-400">
+            {summary.totalRooms.toLocaleString()} <span className="text-sm font-medium text-gray-500">실</span>
           </div>
         </div>
-      )}
-
-      {/* 객실 및 가동률 집계 기준 안내 가이드 */}
-      <div className="bg-gray-900 border border-indigo-900/40 p-5 rounded-xl shadow-xl space-y-4">
-        <div className="flex items-center gap-2 border-b border-gray-800 pb-2.5">
-          <Info size={16} className="text-indigo-400" />
-          <span className="font-bold text-gray-100 text-sm">벨포레 리조트 객실 및 가동률(OCC) 집계 기준</span>
+        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
+          <p className="text-sm font-semibold text-gray-400 mb-1">투숙 인원</p>
+          <div className="text-2xl font-black text-emerald-400">
+            {summary.totalRoomCap.toLocaleString()} <span className="text-sm font-medium text-gray-500">명</span>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
-            <div>
-              <span className="font-semibold text-indigo-300 text-xs block mb-2">① 리조트 객실 수용량</span>
-              <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
-                <li>• 총 물리 객실: <span className="text-white font-semibold">180실</span> (16평 90실, 35평 90실)</li>
-                <li>• 51평(커넥팅룸)은 16평 1실과 35평 1실을 조합하여 판매하므로 전체 총 물리 객실 수(180실)에는 변동이 없습니다.</li>
-              </ul>
-            </div>
-            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
-              <strong className="text-indigo-400">실제 예:</strong> 16평 50실, 35평 40실 판매 시 총 90실이 점유된 것으로 집계.
-            </div>
+        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
+          <p className="text-sm font-semibold text-gray-400 mb-1">골프 팀 수</p>
+          <div className="text-2xl font-black text-amber-400">
+            {summary.totalGolfTeams.toLocaleString()} <span className="text-sm font-medium text-gray-500">팀</span>
           </div>
-          
-          <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
-            <div>
-              <span className="font-semibold text-amber-300 text-xs block mb-2">② 51평형 (커넥팅룸) 특성</span>
-              <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
-                <li>• 물리 구조: <span className="text-white font-semibold">16평 1실 + 35평 1실</span> 결합</li>
-                <li>• 가동률: 단독 산출 불가 (<span className="text-white font-semibold">-</span> 처리)</li>
-                <li>• <span className="text-white font-semibold">ADR(객단가)</span>: 방 2개가 아닌 <span className="text-amber-300 font-semibold">순수 예약 1건</span> 기준으로 산출</li>
-              </ul>
-            </div>
-            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
-              <strong className="text-amber-400">실제 예:</strong> 51평 1건 매출 30만 원 발생 시 단가는 30만 원으로 단독 표출.
-            </div>
-          </div>
-          
-          <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
-            <div>
-              <span className="font-semibold text-emerald-300 text-xs block mb-2">③ 16평/35평 실질 OCC</span>
-              <ul className="text-gray-300 text-xs space-y-2 leading-relaxed font-mono">
-                <li>• 16평 OCC:<br /><span className="text-white font-semibold">&#123;16평 R/N + (51평 R/N &divide; 2)&#125; / 90실</span></li>
-                <li>• 35평 OCC:<br /><span className="text-white font-semibold">&#123;35평 R/N + (51평 R/N &divide; 2)&#125; / 90실</span></li>
-              </ul>
-            </div>
-            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
-              <strong className="text-emerald-400">실제 예:</strong> 16평 단독 40실 + 51평 10실(물리 20실) 판매 시 16평 OCC는 (40 + 5) / 90 = 50.0%
-            </div>
-          </div>
-          
-          <div className="bg-gray-950/50 p-4 rounded-lg border border-gray-800/80 flex flex-col justify-between">
-            <div>
-              <span className="font-semibold text-indigo-300 text-xs block mb-2">④ 전체 가동률 (Total OCC)</span>
-              <ul className="text-gray-300 text-xs space-y-2 leading-relaxed">
-                <li>• 51평 실적은 수신 시 물리 가중치(x2)가 이미 반영되어 있습니다.</li>
-                <li className="font-mono pt-1 text-white font-semibold">• Total OCC = (16평 + 35평 + 51평) / 180실</li>
-              </ul>
-            </div>
-            <div className="border-t border-gray-800/80 mt-3 pt-2 text-[10px] text-gray-400 leading-normal">
-              <strong className="text-indigo-400">실제 예:</strong> 16평 40실, 35평 30실, 51평 10실(물리 20실) 판매 시 전체 OCC는 (40 + 30 + 20) / 180 = 50.0%
-            </div>
+        </div>
+        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex flex-col justify-center">
+          <p className="text-sm font-semibold text-gray-400 mb-1">총 방문객 수</p>
+          <div className="text-2xl font-black text-cyan-400">
+            {(summary.totalGuests || 0).toLocaleString()} <span className="text-sm font-medium text-gray-500">명</span>
           </div>
         </div>
       </div>
 
-      {/* 1. 객실 세그먼트별 실적 (Room Segment & PY Matrix) */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-bold text-gray-200">1. 객실 세그먼트별 실적 (평형별 크로스탭) <span className="text-sm font-normal text-gray-400 ml-2">(R/N 제외)</span></h2>
-        <div className="h-[295px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-          <AgGridReact
-              theme="legacy"
-            rowData={matrixRowData}
-            columnDefs={matrixColDefs}
-            defaultColDef={{ 
-              resizable: true, 
-              wrapHeaderText: true, 
-              autoHeaderHeight: true, 
-              cellStyle: { textAlign: 'center' } 
-            }}
-            onGridReady={(params) => setMatrixGridApi(params.api)}
-            animateRows={true}
-            headerHeight={48}
-            groupHeaderHeight={42}
-            getRowStyle={() => undefined}
-            className="h-full w-full"
-          />
-        </div>
-      </div>
-
-      {/* 1-2. 마켓 채널 상세 실적 (V5) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3">
-          <h2 className="text-lg font-bold text-gray-200">1-2. 객실 평수별 마켓 채널 실적 (V5)</h2>
-          <div className="h-[350px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-            <AgGridReact
-              theme="legacy"
-              rowData={apiResponse?.roomMarketBreakdown || []}
-              columnDefs={roomMarketColDefs}
-              defaultColDef={{ 
-                resizable: true, 
-                wrapHeaderText: true, 
-                autoHeaderHeight: true, 
-                cellStyle: { textAlign: 'center' } 
-              }}
-              animateRows={true}
-              rowHeight={40}
-              headerHeight={42}
-              getRowStyle={() => undefined}
-              className="h-full w-full"
-            />
-          </div>
-        </div>
-
-        <div className="lg:col-span-1 space-y-3">
-          <h2 className="text-lg font-bold text-gray-200">채널별 매출 점유율</h2>
-          <div className="h-[350px] bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center justify-center">
-            {pieChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
-                    formatter={(value: any) => [`${Math.round(Number(value)/1000).toLocaleString()} 천원`, '매출']}
-                  />
-                  <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '11px', color: '#9CA3AF' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="text-gray-500 text-sm">데이터가 없습니다</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 2. 예약 채널별 객실 실적 */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-bold text-gray-200">2. 예약 채널별 객실 실적 (채널별 요약)</h2>
-        <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-          <AgGridReact
-              theme="legacy"
-            rowData={mergeBreakdownData(apiResponse?.channelBreakdown || [])}
-            columnDefs={channelColDefs}
-            defaultColDef={{ 
-              resizable: true, 
-              wrapHeaderText: true, 
-              autoHeaderHeight: true, 
-              cellStyle: { textAlign: 'center' } 
-            }}
-            animateRows={true}
-            rowHeight={40}
-            headerHeight={42}
-            getRowStyle={() => undefined}
-            className="h-full w-full"
-          />
-        </div>
-      </div>
-
-      {/* 2-2. 티켓/레저 영업장별 실적 (신규) */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-bold text-gray-200">2-2. 티켓/레저 영업장별 실적 (방문객 및 매출)</h2>
-        <div className="h-[300px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
-          <AgGridReact
-              theme="legacy"
-            rowData={ticketGroupsMappedData}
-            columnDefs={ticketColDefs}
-            defaultColDef={{ 
-              resizable: true, 
-              wrapHeaderText: true, 
-              autoHeaderHeight: true, 
-              cellStyle: { textAlign: 'center' } 
-            }}
-            animateRows={true}
-            rowHeight={40}
-            headerHeight={42}
-            getRowStyle={() => undefined}
-            className="h-full w-full"
-          />
-        </div>
-      </div>
-
-      {/* 3. 요금코드 분류표 (Rate Code Classification Mapping) */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-bold text-gray-200">3. 요금코드별 실적 (분류표 정의)</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-4">
-          {Object.entries(rateCodesData).map(([segmentName, codes]) => (
-            <div key={segmentName} className="bg-gray-900/40 rounded-xl border border-gray-800 flex flex-col h-[450px]">
-              {/* Header */}
-              <div className="px-3 py-2.5 bg-gray-950/60 border-b border-gray-800 rounded-t-xl flex justify-between items-center shrink-0">
-                <span className="font-semibold text-xs text-indigo-300 truncate" title={segmentName}>{segmentName}</span>
-                <span className="text-[10px] bg-indigo-950/50 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-900/30">
-                  {codes.length}개
-                </span>
-              </div>
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs custom-scrollbar">
-                {codes.map((item, idx) => {
-                  const stats = rateCodeMap[item.code] || { roomsSold: 0, revenue: 0 }
-                  return (
-                    <div key={idx} className="p-2 rounded bg-gray-950/30 hover:bg-gray-950/70 border border-gray-800/50 transition-all flex flex-col gap-1.5">
-                      <div className="flex justify-between items-start gap-1">
-                        <span className="text-gray-200 font-medium truncate" title={item.code}>{item.code}</span>
-                        {item.type && (
-                          <span className={`text-[9px] px-1 py-0.2 rounded shrink-0 font-medium ${
-                            item.type === "고정" 
-                              ? "bg-emerald-950/40 text-emerald-400 border border-emerald-900/20" 
-                              : "bg-amber-950/40 text-amber-400 border border-amber-900/20"
-                          }`}>
-                            {item.type}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] text-gray-500 border-t border-gray-800/20 pt-1 mt-0.5">
-                        <span>객실: <strong className="text-indigo-400">{stats.roomsSold}</strong></span>
-                        <span>매출: <strong className="text-emerald-500">{Math.round(stats.revenue / 1000).toLocaleString()}</strong></span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Chart Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-3 bg-gray-900/50 p-5 rounded-xl border border-gray-800 h-80">
-          <h3 className="text-sm font-semibold text-gray-200 mb-4">예약 채널별 매출 현황 (Revenue by Channel)</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 0, left: 10, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-              <XAxis dataKey="name" stroke="#9CA3AF" tick={{ fill: '#9CA3AF' }} />
-              <YAxis stroke="#9CA3AF" tick={{ fill: '#9CA3AF' }} tickFormatter={(val) => val.toLocaleString()} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* CHART 1: Pie Chart (Category Sales) */}
+        <div className="lg:col-span-1 bg-gray-900 p-5 rounded-2xl border border-gray-800 h-[350px]">
+          <h2 className="text-lg font-bold text-gray-200 mb-4">사업부별 매출 비중</h2>
+          <ResponsiveContainer width="100%" height="85%">
+            <PieChart>
+              <Pie
+                data={pieChartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={90}
+                paddingAngle={2}
+                dataKey="value"
+                stroke="none"
+              >
+                {pieChartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                ))}
+              </Pie>
               <Tooltip 
-                cursor={{ fill: '#374151', opacity: 0.4 }}
-                contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#F3F4F6' }}
-                formatter={(value: any) => [`${Number(value).toLocaleString()} 천원`, '매출']}
+                formatter={(value: any) => [`${Number(value).toLocaleString()}원`, "매출액"]}
+                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                itemStyle={{ color: '#fff' }}
               />
-              <Bar dataKey="value" fill="#4F46E5" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* CHART 2: Line Chart (Daily Trends) */}
+        <div className="lg:col-span-2 bg-gray-900 p-5 rounded-2xl border border-gray-800 h-[350px]">
+          <h2 className="text-lg font-bold text-gray-200 mb-4">주간 매출 트렌드 (단위: 만원)</h2>
+          <ResponsiveContainer width="100%" height="85%">
+            <LineChart data={lineChartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+              <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickMargin={10} />
+              <YAxis stroke="#9ca3af" fontSize={12} tickFormatter={(val) => val.toLocaleString()} />
+              <Tooltip 
+                formatter={(value: any) => [`${Number(value).toLocaleString()}만원`, "매출"]}
+                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                itemStyle={{ color: '#fff' }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="revenue" 
+                stroke="#6366f1" 
+                strokeWidth={3}
+                dot={{ r: 4, fill: "#6366f1", strokeWidth: 2 }}
+                activeDot={{ r: 6 }} 
+              />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* 4. 전사 통합 실적 (Daily Report) */}
-      <div className="space-y-3 pb-10">
-        <h2 className="text-lg font-bold text-gray-200 flex items-center gap-2">
-          4. 전사 통합 실적 (Total Daily Report)
-        </h2>
-        <div className="h-[500px] bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+      {/* MATRIX WEEKLY TABLE (NEW) */}
+      <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-200">요일비교 매트릭스</h2>
+            <p className="text-xs text-gray-500 mt-1">백엔드 정렬 순서 및 소계(Subtotal) 처리 강제 렌더링 (자체 계산 없음)</p>
+          </div>
+        </div>
+
+        <div className="h-[450px] bg-gray-950/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
           <AgGridReact
-              theme="legacy"
-            rowData={dailyReportRowData}
-            columnDefs={dailyReportColDefs}
-            defaultColDef={{ 
-              resizable: true, 
-              wrapHeaderText: true, 
-              autoHeaderHeight: true, 
-              cellStyle: { textAlign: 'center' } 
-            }}
+            theme="legacy"
+            rowData={matrixData}
+            columnDefs={matrixColDefs}
+            getRowStyle={getRowStyle}
+            // 프론트엔드의 커스텀 정렬을 막기 위해 sortable 해제
+            defaultColDef={{ resizable: true, sortable: false }}
+            animateRows={false} // 순서가 고정이므로 애니메이션 불필요
+            rowHeight={42}
+            headerHeight={44}
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+
+      {/* FACILITY TABLE (Dynamic Tabs) */}
+      <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+          <h2 className="text-lg font-bold text-gray-200">영업장별 세부 매출</h2>
+          
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {availableTabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
+                  activeTab === tab
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-[400px] bg-gray-950/50 rounded-xl border border-gray-800 overflow-hidden ag-theme-alpine-dark">
+          <AgGridReact
+            theme="legacy"
+            rowData={filteredFacilityData}
+            columnDefs={facilityColDefs}
+            defaultColDef={{ resizable: true, sortable: true }}
             animateRows={true}
-            rowHeight={40}
-            headerHeight={42}
-            getRowStyle={(params) => {
-              if (params.data?.isFooter) return { background: '#1e1b4b', borderTop: '2px solid #4f46e5' } as any;
-              if (params.data?.isGroup) return { background: '#1f2937' } as any;
-              return undefined;
-            }}
+            rowHeight={42}
+            headerHeight={44}
             className="h-full w-full"
           />
         </div>
       </div>
     </div>
   )
-}
-
-function parseISO(dateString: string): Date {
-  const parts = dateString.split("-")
-  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
 }
