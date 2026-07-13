@@ -166,3 +166,38 @@ export const saveTargets = async (payload: {
 
   return await res.json();
 };
+
+export interface RoomBudgetPayload {
+  targetYearMonth: string;
+  budgets: {
+    segmentName: string;
+    roomType: string;
+    targetRevenue: number;
+    targetRoomsSold: number;
+  }[];
+}
+
+export const saveRoomBudgets = async (payload: RoomBudgetPayload): Promise<any> => {
+  const apiBase = getApiBase();
+  const response = await fetch(`${apiBase}/api/v5/admin/budget/room`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer belleforet-m2m-secret'
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  if (!response.ok) {
+    let errorDetail = response.statusText;
+    try {
+      const errJson = await response.json();
+      if (errJson && errJson.error) {
+        errorDetail = errJson.error;
+      }
+    } catch (e) {}
+    throw new Error(`목표액 일괄 저장 실패 (${response.status}): ${errorDetail}`);
+  }
+
+  return await response.json();
+};
